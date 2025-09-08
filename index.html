@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
+
+  <!-- A VR Purple Bacteria Museum Pilot Prototype by Sonia Rodriguez - Jose L. Rubio - D.Puyol - URJC-->
+  
 <head>
   <meta charset="utf-8" />
-  <title>Museo Nascere · A-Frame</title>
+  <title>Purple Bacteria Museum</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.0/dist/aframe-extras.min.js"></script>
   <link rel="stylesheet" href="./style.css">
 </head>
+
+<!-- ********************************* -->
+<!--        Assets Enviro       -->        
+<!-- ********************************* -->
+  
 <body>
   <a-scene
     renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 1.2"
@@ -40,6 +48,11 @@
     <a-entity id="debug" position="0 2 -2" text="value: ; align: center"></a-entity>
   </a-scene>
 
+
+  <!-- ********************************* -->
+  <!--        Interactividad       -->        
+  <!-- ********************************* -->
+
   <script>
   // Function to play the sound
  function playSound() {
@@ -59,6 +72,7 @@
   </script>
 </body>
 </html>
+
 
 
 
