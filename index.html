@@ -10,6 +10,51 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.0/dist/aframe-extras.min.js"></script>
   <link rel="stylesheet" href="./style.css">
+
+  <!-- ********************************* -->
+  <!--        Scripts Head      -->        
+  <!-- ********************************* -->
+  
+  <!-- show-on-near: registered BEFORE the scene so A-Frame can attach it -->
+  <script>
+  AFRAME.registerComponent('show-on-near', {
+    schema: {
+      target: { type: 'selector' },              // e.g. #rig
+      distance: { type: 'number', default: 4 },  // meters
+      debug: { type: 'selector', default: null } // optional <a-entity text> for debugging
+    },
+    init() {
+      this._visible = false;
+      this.el.object3D.visible = false; // start hidden
+      this._a = new THREE.Vector3();
+      this._b = new THREE.Vector3();
+      // If a GLTF loads later, keep it hidden until near
+      this.el.addEventListener('model-loaded', () => {
+        this.el.object3D.visible = false;
+        this._visible = false;
+      });
+    },
+    tick() {
+      const t = this.data.target;
+      if (!t || !t.object3D) return;
+
+      this.el.object3D.getWorldPosition(this._a);
+      t.object3D.getWorldPosition(this._b);
+      const d = this._a.distanceTo(this._b);
+      const shouldShow = d <= this.data.distance;
+
+      if (shouldShow !== this._visible) {
+        this.el.object3D.visible = shouldShow;
+        this._visible = shouldShow;
+      }
+
+      // Optional on-screen debug — only if you wire a #debug entity
+      if (this.data.debug && this.data.debug.components && this.data.debug.components.text) {
+        this.data.debug.setAttribute('text', 'value', `dist: ${d.toFixed(2)}m (<= ${this.data.distance})`);
+      }
+    }
+  });
+  </script>
 </head>
 
 <!-- ********************************* -->
@@ -20,24 +65,36 @@
   <a-scene
     renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 1.2"
     background="color: #c6ddf1"
-    fog="type: exponential; color: #c6ddf1; density: 0.06"
+    fog="type: exponential; color: #d9d9d9; density: 0.1"
   >
     <a-assets timeout="15000">
       <a-asset-item id="mdl-cristales" src="./assets/cristales_bacterias_2.glb"></a-asset-item>
-      <a-asset-item id="mdl-techo" src="./assets/techo.glb"></a-asset-item>
+      <!-- <a-asset-item id="mdl-techo" src="./assets/techo.glb"></a-asset-item> -->
+      <a-asset-item id="planeta_museo_exterior" src="./assets/planeta_museo_central.glb"></a-asset-item>
       <a-asset-item id="mdl-techo_paredes_2" src="./assets/paredes_suelo_textura_museo.glb"></a-asset-item>
     </a-assets>
 
     <a-sound id="bg-sound" src="./assets/music.mp3" autoplay="false" loop="true" volume="0.4" position="0 1.6 0"></a-sound>
 
     <!-- Modern light rig -->
-    <a-entity light="type: ambient; intensity: 0.25"></a-entity>
-    <a-entity light="type: hemisphere; intensity: 0.7; color: #ffffff; groundColor: #556677"></a-entity>
+    <a-entity light="type: ambient; intensity: 0.2"></a-entity>
+    <a-entity light="type: hemisphere; intensity: 0.4; color: #ffffff; groundColor: #556677"></a-entity>
     <a-entity light="type: directional; intensity: 2.2" position="2 4 3"></a-entity>
 
     <!-- Models -->
-    <a-entity gltf-model="#mdl-techo" position="0 6 10" scale="1 1 1"></a-entity>
+    <!-- <a-entity gltf-model="#mdl-techo" position="-1 6 10" scale="1 1 1"></a-entity> -->
     <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
+
+    <!-- Planet: starts hidden; shows only when the rig is within 'distance' meters -->
+    <a-entity id="planet"
+              gltf-model="#planeta_museo_exterior"
+              position="3 2 0"
+              scale="1 1 1"
+              show-on-near="target: #rig; distance: 4"
+              animation__rotation="property: rotation; to: 5 5 600; loop: true; dur: 20000; easing: linear"
+              animation__float="property: position; dir: alternate; dur: 4000; easing: easeInOutSine; loop: true; to: 3 2.05 0">
+    </a-entity>
+
     <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
 
   <!-- ********************************* -->
@@ -45,34 +102,29 @@
   <!-- ********************************* -->
     
     <!-- Camera + controls -->
-    <a-entity id="rig" position="0 1.6 4">
-      <a-entity camera look-controls wasd-controls cursor="rayOrigin: mouse"></a-entity>
+    <!-- Move with WASD on the RIG so #rig position actually changes -->
+    <a-entity id="rig" position="0 1.6 4" wasd-controls>
+      <a-entity camera look-controls cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
 
-    <a-entity id="debug" position="0 2 -2" text="value: ; align: center"></a-entity>
+    <!-- If you want the distance readout again, uncomment this and add ; debug: #debug above
+    <a-entity id="debug" position="0 2 -2" text="value: ; align: center; color: #000"></a-entity>
+    -->
   </a-scene>
 
-
   <!-- ********************************* -->
-  <!--        Scripts       -->        
+  <!--        Scripts Footer      -->        
   <!-- ********************************* -->
-
+  
   <script>
-  // Function to play the sound
- function playSound() {
-    // Get the a-sound element by its ID
+  // Play background sound on first user interaction (autoplay policies)
+  function playSound() {
     const sound = document.querySelector("#bg-sound");
-
-    // Check if the sound component is found and play it
-    if (sound) {
+    if (sound && sound.components && sound.components.sound) {
       sound.components.sound.playSound();
     }
   }
-
-  // Add a click event listener to the document
-  document.addEventListener("click", function () {
-    playSound();
-  });
+  document.addEventListener("click", playSound);
   </script>
 </body>
 </html>
