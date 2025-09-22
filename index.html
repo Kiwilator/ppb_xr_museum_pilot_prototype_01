@@ -15,51 +15,137 @@
   <!--        Scripts Head      -->        
   <!-- ********************************* -->
   
-  <!-- show-on-near: registered BEFORE the scene so A-Frame can attach it -->
   <script>
   AFRAME.registerComponent('show-on-near', {
     schema: {
-      target: { type: 'selector' },              // e.g. #rig
-      distance: { type: 'number', default: 4 },  // meters
-      debug: { type: 'selector', default: null } // optional <a-entity text> for debugging
+      target:   { type: 'selector' },
+      distance: { type: 'number', default: 4 },
+      duration: { type: 'number', default: 1200 }
     },
     init() {
-      this._visible = false;
-      this.el.object3D.visible = false; // start hidden
+      this._opacity = 0;
       this._a = new THREE.Vector3();
       this._b = new THREE.Vector3();
-      // If a GLTF loads later, keep it hidden until near
+
+      // WeakMap to remember each node/material's base opacity
+      this._base = new WeakMap();
+
+      if (this.el.object3D) this.el.object3D.visible = true;
+
+      // Capture base opacities once so we can scale them
+      this.captureBaseOpacities(this.el);
+
+      // Start invisible
+      this.applyOpacity(0);
+
       this.el.addEventListener('model-loaded', () => {
-        this.el.object3D.visible = false;
-        this._visible = false;
+        this.captureBaseOpacities(this.el);
+        this.applyOpacity(0);
+      });
+      this.el.addEventListener('object3dset', () => {
+        this.captureBaseOpacities(this.el);
+        this.applyOpacity(0);
       });
     },
-    tick() {
+
+    tick(time, delta) {
       const t = this.data.target;
       if (!t || !t.object3D) return;
 
       this.el.object3D.getWorldPosition(this._a);
       t.object3D.getWorldPosition(this._b);
       const d = this._a.distanceTo(this._b);
-      const shouldShow = d <= this.data.distance;
 
-      if (shouldShow !== this._visible) {
-        this.el.object3D.visible = shouldShow;
-        this._visible = shouldShow;
-      }
+      const goingIn = d <= this.data.distance;
+      const step    = (delta / this.data.duration) * (goingIn ? 1 : -1);
+      const next    = THREE.MathUtils.clamp(this._opacity + step, 0, 1);
 
-      // Optional on-screen debug — only if you wire a #debug entity
-      if (this.data.debug && this.data.debug.components && this.data.debug.components.text) {
-        this.data.debug.setAttribute('text', 'value', `dist: ${d.toFixed(2)}m (<= ${this.data.distance})`);
+      if (next !== this._opacity) {
+        this._opacity = next;
+        this.applyOpacity(this._opacity);
       }
-    }
+    },
+
+    // ---------- Helpers ----------
+
+    // Record the "base" opacity of everything under el once
+    captureBaseOpacities(el) {
+      // For entity-level material component (e.g., <a-plane>)
+      if (el.components && el.components.material) {
+        const matAttr = el.getAttribute('material') || {};
+        const base = (typeof matAttr.opacity === 'number') ? matAttr.opacity : 1;
+        this._base.set(el, base);
+      }
+      // For entity-level text component
+      if (el.components && el.components.text) {
+        const txtAttr = el.getAttribute('text') || {};
+        const base = (typeof txtAttr.opacity === 'number') ? txtAttr.opacity : 1;
+        // Use a small holder object as the key to distinguish from material
+        const key = { type: 'text', el };
+        el.__textBaseKey = key;
+        this._base.set(key, base);
+      }
+      // For mesh materials (GLTF, geometry)
+      const mesh = el.getObject3D('mesh');
+      if (mesh) {
+        mesh.traverse(node => {
+          if (node.isMesh && node.material) {
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(m => {
+              if (!this._base.has(m)) this._base.set(m, (typeof m.opacity === 'number') ? m.opacity : 1);
+            });
+          }
+        });
+      }
+      // Recurse into children
+      Array.from(el.children).forEach(child => this.captureBaseOpacities(child));
+    },
+
+    // Apply scaled opacity = baseOpacity * value to el and its children
+    applyOpacity(value) {
+      this.setOpacityForEl(this.el, value);
+      Array.from(this.el.children).forEach(child => this.setOpacityForEl(child, value));
+    },
+
+setOpacityForEl(el, value) {
+  // Meshes
+  const mesh = el.getObject3D('mesh');
+  if (mesh) {
+    mesh.traverse(node => {
+      if (node.isMesh && node.material) {
+        const mats = Array.isArray(node.material) ? node.material : [node.material];
+        mats.forEach(m => {
+          const base = this._base.get(m) ?? 1;
+          const v = base * value;
+          m.transparent = v < 1 || base < 1;
+          m.opacity = v;
+          if (m.alphaTest) m.alphaTest = Math.min(m.alphaTest, 0.01);
+          m.needsUpdate = true;
+        });
+      }
+    });
+  }
+
+  // Material component (e.g., <a-plane>)
+  if (el.components && el.components.material) {
+    const base = this._base.get(el) ?? 1;
+    const v = base * value;
+    el.setAttribute('material', 'transparent', v < 1 || base < 1);
+    el.setAttribute('material', 'opacity', v);
+  }
+
+  // Text component (fade always 0 → 1)
+  if (el.components && el.components.text) {
+    const current = el.getAttribute('text') || {};
+    el.setAttribute('text', Object.assign({}, current, { opacity: value }));
+  }
+
+  // Recurse into children
+  Array.from(el.children).forEach(child => this.setOpacityForEl(child, value));
+}
   });
   </script>
 </head>
-
-<!-- ********************************* -->
-<!--        Assets Enviro       -->        
-<!-- ********************************* -->
   
 <body>
   <a-scene
@@ -69,47 +155,52 @@
   >
     <a-assets timeout="15000">
       <a-asset-item id="mdl-cristales" src="./assets/cristales_bacterias_2.glb"></a-asset-item>
-      <!-- <a-asset-item id="mdl-techo" src="./assets/techo.glb"></a-asset-item> -->
       <a-asset-item id="planeta_museo_exterior" src="./assets/planeta_museo_central.glb"></a-asset-item>
       <a-asset-item id="mdl-techo_paredes_2" src="./assets/paredes_suelo_textura_museo.glb"></a-asset-item>
     </a-assets>
 
     <a-sound id="bg-sound" src="./assets/music.mp3" autoplay="false" loop="true" volume="0.4" position="0 1.6 0"></a-sound>
 
-    <!-- Modern light rig -->
+    <!-- Luces -->
     <a-entity light="type: ambient; intensity: 0.2"></a-entity>
     <a-entity light="type: hemisphere; intensity: 0.4; color: #ffffff; groundColor: #556677"></a-entity>
     <a-entity light="type: directional; intensity: 2.2" position="2 4 3"></a-entity>
 
-    <!-- Models -->
-    <!-- <a-entity gltf-model="#mdl-techo" position="-1 6 10" scale="1 1 1"></a-entity> -->
+    <!-- Modelos -->
     <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
 
-    <!-- Planet: starts hidden; shows only when the rig is within 'distance' meters -->
+    <!-- Planeta -->
     <a-entity id="planet"
               gltf-model="#planeta_museo_exterior"
               position="3 2 0"
               scale="1 1 1"
-              show-on-near="target: #rig; distance: 4"
+              show-on-near="target: #rig; distance: 4; duration: 1200"
               animation__rotation="property: rotation; to: 5 5 600; loop: true; dur: 20000; easing: linear"
               animation__float="property: position; dir: alternate; dur: 4000; easing: easeInOutSine; loop: true; to: 3 2.05 0">
     </a-entity>
 
+    <!-- Texto + fondo (grupo) -->
+    <a-entity id="planet-text-group" position="5 1.6 -0.2" rotation="0 -25 0" show-on-near="target: #rig; distance: 4; duration: 1200">
+      <!-- Fondo negro translúcido (base opacity = 0.4) -->
+      <a-plane id="planet-text-bg"
+               width="3.6" height="3.1"
+               color="#000000"
+               material="transparent: true; opacity: 0.4">
+      </a-plane>
+
+      <!-- Texto -->
+      <a-entity id="planet-text"
+                position="0 0.2 0.01"
+                text="value: ; align: left; wrapCount: 50; width: 3.5; color: #FFFFFF; opacity: 1">
+      </a-entity>
+    </a-entity>
+
     <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
 
-  <!-- ********************************* -->
-  <!--        Interactividad       -->        
-  <!-- ********************************* -->
-    
-    <!-- Camera + controls -->
-    <!-- Move with WASD on the RIG so #rig position actually changes -->
+    <!-- Cámara -->
     <a-entity id="rig" position="0 1.6 4" wasd-controls>
       <a-entity camera look-controls cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
-
-    <!-- If you want the distance readout again, uncomment this and add ; debug: #debug above
-    <a-entity id="debug" position="0 2 -2" text="value: ; align: center; color: #000"></a-entity>
-    -->
   </a-scene>
 
   <!-- ********************************* -->
@@ -117,7 +208,7 @@
   <!-- ********************************* -->
   
   <script>
-  // Play background sound on first user interaction (autoplay policies)
+  // Música
   function playSound() {
     const sound = document.querySelector("#bg-sound");
     if (sound && sound.components && sound.components.sound) {
@@ -125,13 +216,19 @@
     }
   }
   document.addEventListener("click", playSound);
+
+  // Texto largo asignado vía JS
+  const txt = `Over three billion years ago, Earth was a very different place: young oceans, almost no oxygen, and layers of water where light filtered gently down. In that setting, life began to use sunlight in simple ways.
+
+Among those early light-users were the purple bacteria. They carry out photosynthesis without releasing oxygen. Instead of splitting water, they use substances like hydrogen sulphide or organic compounds. That’s why they thrive where there is light but little oxygen—in microbial mats and stratified waters. They offer a glimpse of what photosynthesis may have looked like before the version that oxygenated the planet.
+
+Much later came the cyanobacteria with the “modern” form of photosynthesis that does release oxygen, triggering the Great Oxidation around 2.4 billion years ago—a leap that changed the air and the oceans for good.`;
+
+  const textEl = document.querySelector('#planet-text');
+  if (textEl) {
+    const current = textEl.getAttribute('text') || {};
+    textEl.setAttribute('text', Object.assign({}, current, { value: txt }));
+  }
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
