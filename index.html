@@ -26,57 +26,30 @@
       this._opacity = 0;
       this._a = new THREE.Vector3();
       this._b = new THREE.Vector3();
-
-      // WeakMap to remember each node/material's base opacity
       this._base = new WeakMap();
-
       if (this.el.object3D) this.el.object3D.visible = true;
-
-      // Capture base opacities once so we can scale them
       this.captureBaseOpacities(this.el);
-
-      // Start invisible
       this.applyOpacity(0);
-
-      this.el.addEventListener('model-loaded', () => {
-        this.captureBaseOpacities(this.el);
-        this.applyOpacity(0);
-      });
-      this.el.addEventListener('object3dset', () => {
-        this.captureBaseOpacities(this.el);
-        this.applyOpacity(0);
-      });
+      this.el.addEventListener('model-loaded', () => { this.captureBaseOpacities(this.el); this.applyOpacity(0); });
+      this.el.addEventListener('object3dset',   () => { this.captureBaseOpacities(this.el); this.applyOpacity(0); });
     },
-
     tick(time, delta) {
       const t = this.data.target;
       if (!t || !t.object3D) return;
-
       this.el.object3D.getWorldPosition(this._a);
       t.object3D.getWorldPosition(this._b);
       const d = this._a.distanceTo(this._b);
-
       const goingIn = d <= this.data.distance;
       const step    = (delta / this.data.duration) * (goingIn ? 1 : -1);
       const next    = THREE.MathUtils.clamp(this._opacity + step, 0, 1);
-
-      if (next !== this._opacity) {
-        this._opacity = next;
-        this.applyOpacity(this._opacity);
-      }
+      if (next !== this._opacity) { this._opacity = next; this.applyOpacity(this._opacity); }
     },
-
-    // ---------- Helpers ----------
-
-    // Record the "base" opacity of everything under el once
     captureBaseOpacities(el) {
-      // For entity-level material component (e.g., <a-plane>)
       if (el.components && el.components.material) {
         const matAttr = el.getAttribute('material') || {};
         const base = (typeof matAttr.opacity === 'number') ? matAttr.opacity : 1;
         this._base.set(el, base);
       }
-      // For entity-level text component
       if (el.components && el.components.text) {
         const txtAttr = el.getAttribute('text') || {};
         const base = (typeof txtAttr.opacity === 'number') ? txtAttr.opacity : 1;
@@ -84,30 +57,22 @@
         el.__textBaseKey = key;
         this._base.set(key, base);
       }
-      // For mesh materials (GLTF, geometry)
       const mesh = el.getObject3D('mesh');
       if (mesh) {
         mesh.traverse(node => {
           if (node.isMesh && node.material) {
             const mats = Array.isArray(node.material) ? node.material : [node.material];
-            mats.forEach(m => {
-              if (!this._base.has(m)) this._base.set(m, (typeof m.opacity === 'number') ? m.opacity : 1);
-            });
+            mats.forEach(m => { if (!this._base.has(m)) this._base.set(m, (typeof m.opacity === 'number') ? m.opacity : 1); });
           }
         });
       }
-      // Recurse into children
       Array.from(el.children).forEach(child => this.captureBaseOpacities(child));
     },
-
-    // Apply scaled opacity = baseOpacity * value to el and its children
     applyOpacity(value) {
       this.setOpacityForEl(this.el, value);
       Array.from(this.el.children).forEach(child => this.setOpacityForEl(child, value));
     },
-
     setOpacityForEl(el, value) {
-      // Meshes
       const mesh = el.getObject3D('mesh');
       if (mesh) {
         mesh.traverse(node => {
@@ -124,32 +89,23 @@
           }
         });
       }
-
-      // Material component (e.g., <a-plane>)
       if (el.components && el.components.material) {
         const base = this._base.get(el) ?? 1;
         const v = base * value;
         el.setAttribute('material', 'transparent', v < 1 || base < 1);
         el.setAttribute('material', 'opacity', v);
       }
-
-      // Text component (fade always 0 → 1)
       if (el.components && el.components.text) {
         const current = el.getAttribute('text') || {};
         el.setAttribute('text', Object.assign({}, current, { opacity: value }));
       }
-
-      // Recurse into children
       Array.from(el.children).forEach(child => this.setOpacityForEl(child, value));
     }
   });
 
-  // In-world video audio toggle component
+  // In-world video audio toggle component (unchanged behavior)
   AFRAME.registerComponent('video-audio-toggle', {
-    schema: {
-      video: { type: 'selector' },     // <video> asset element
-      label: { type: 'selector' }      // text entity to update
-    },
+    schema: { video: { type: 'selector' }, label: { type: 'selector' } },
     init() {
       this._onClick = this.onClick.bind(this);
       this._onEnter = () => this.el.setAttribute('material', 'opacity', 0.9);
@@ -163,13 +119,12 @@
       const v = this.data.video;
       if (!v) return;
       const p = v.play();
-      if (p && typeof p.then === 'function') p.catch(()=>{ /* ignore */ });
+      if (p && typeof p.then === 'function') p.catch(()=>{});
     },
     onClick() {
-      const v = this.data.video;
-      if (!v) return;
-      this.playVideo();        // ensure playing after a user gesture
-      v.muted = !v.muted;      // toggle
+      const v = this.data.video; if (!v) return;
+      this.playVideo();
+      v.muted = !v.muted;
       if (!v.muted && v.volume === 0) v.volume = 0.8;
       this.updateLabel();
     },
@@ -186,14 +141,86 @@
       this.el.removeEventListener('mouseleave', this._onLeave);
     }
   });
+
+  // Toggle panel + play/pause voiceover; with ironclad first-click unlock
+  AFRAME.registerComponent('toggle-entity-visibility', {
+    schema: {
+      target:   { type: 'selector' },          // entity to show/hide
+      label:    { type: 'selector' },          // label entity to update
+      sound:    { type: 'selector', default: null }, // <a-sound> to control
+      playText: { default: 'Play' },
+      pauseText:{ default: 'Pause' }
+    },
+    init() {
+      this._onClick = this.onClick.bind(this);
+      this._onEnter = () => this.el.setAttribute('material', 'opacity', 0.9);
+      this._onLeave = () => this.el.setAttribute('material', 'opacity', 0.7);
+      this.el.addEventListener('click', this._onClick);
+      this.el.addEventListener('mouseenter', this._onEnter);
+      this.el.addEventListener('mouseleave', this._onLeave);
+      this.updateLabel(); // start as "Play"
+    },
+    unlockAudioIfNeeded() {
+      try {
+        const scene = this.el.sceneEl;
+        const ctx = scene && scene.audioListener && scene.audioListener.context;
+        if (ctx && ctx.state !== 'running') ctx.resume();
+      } catch (e) {}
+    },
+    onClick() {
+      const t = this.data.target;
+      const soundCmp = this.data.sound && this.data.sound.components ? this.data.sound.components.sound : null;
+      if (!t) return;
+
+      // Ensure audio context is running (first click on iOS/Chrome)
+      this.unlockAudioIfNeeded();
+
+      const visibleNow = !!t.getAttribute('visible');
+
+      if (visibleNow) {
+        // Hide + pause
+        t.setAttribute('visible', false);
+        if (soundCmp) { try { soundCmp.pauseSound(); } catch(e) {} }
+      } else {
+        // Show + play/resume (non-looping)
+        t.setAttribute('visible', true);
+        if (soundCmp) {
+          try {
+            // If ended or not playing yet, restart clean; else resume
+            if (!soundCmp.isPlaying) {
+              soundCmp.stopSound();   // resets offset on all platforms
+              soundCmp.playSound();   // play from start
+            }
+          } catch(e) {}
+        }
+      }
+      this.updateLabel();
+    },
+    updateLabel() {
+      const label = this.data.label;
+      const t = this.data.target;
+      const s = this.data.sound && this.data.sound.components ? this.data.sound.components.sound : null;
+      if (!label) return;
+      const panelVisible = t ? !!t.getAttribute('visible') : false;
+      const playing = s ? !!s.isPlaying : false;
+      const nextText = (panelVisible && playing) ? this.data.pauseText : this.data.playText;
+      const current = label.getAttribute('text') || {};
+      label.setAttribute('text', Object.assign({}, current, { value: nextText }));
+    },
+    remove() {
+      this.el.removeEventListener('click', this._onClick);
+      this.el.removeEventListener('mouseenter', this._onEnter);
+      this.el.removeEventListener('mouseleave', this._onLeave);
+    }
+  });
   </script>
 </head>
   
 <body>
   <a-scene
-    renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 1.2"
-    background="color: #c6ddf1"
-    fog="type: exponential; color: #d9d9d9; density: 0.1"
+    renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 0.85; shadowMap: true"
+    background="color: #9aa7b3"
+    fog="type: exponential; color: #7a8793; density: 0.14"
   >
     <a-assets timeout="15000">
       <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
@@ -209,79 +236,116 @@
              crossorigin="anonymous"
              preload="auto">
       </video>
+
+      <!-- VOICEOVER AUDIO ASSET -->
+      <audio id="planet-voiceover" src="./asset/planet_voiceover_01.mp3" preload="auto"></audio>
     </a-assets>
 
-    <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.4" position="0 1.6 0"></a-sound>
+    <!-- Global lights — darker mood -->
+    <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
+    <a-entity light="type: hemisphere; intensity: 0.12; color: #dfe7ef; groundColor: #39454f"></a-entity>
 
-    <!-- Luces -->
-    <a-entity light="type: ambient; intensity: 0.2"></a-entity>
-    <a-entity light="type: hemisphere; intensity: 0.4; color: #ffffff; groundColor: #556677"></a-entity>
-    <a-entity light="type: directional; intensity: 2.2" position="2 4 3"></a-entity>
+    <!-- BIG SCREEN spotlight (aimed at the screen) -->
+    <a-entity id="screen-spot"
+              position="2 4 2"
+              light="type: spot; intensity: 3; angle: 30; penumbra: 0.6; distance: 24; decay: 1; color: #ffffff; castShadow: true; target: #video-screen">
+    </a-entity>
+
+    <!-- PLANET spotlight (aimed at the planet) -->
+    <a-entity id="planet-spot"
+              position="3 4 0.8"
+              light="type: spot; intensity: 2.8; angle: 35; penumbra: 0.6; distance: 18; decay: 1; color: #fff3e6; castShadow: true; target: #planet">
+    </a-entity>
+
+    <!-- Background music -->
+    <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
     <!-- Modelos -->
-    <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
+    <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
 
     <!-- Planeta -->
     <a-entity id="planet"
               gltf-model="#planeta_museo_exterior"
               position="3 2 0"
               scale="1 1 1"
-              show-on-near="target: #rig; distance: 4; duration: 1200"
+              shadow="cast: true; receive: true"
+              show-on-near="target: #camera; distance: 4; duration: 1200"
               animation__rotation="property: rotation; to: 5 5 600; loop: true; dur: 20000; easing: linear"
               animation__float="property: position; dir: alternate; dur: 4000; easing: easeInOutSine; loop: true; to: 3 2.05 0">
     </a-entity>
 
-    <!-- Texto + fondo (grupo) -->
-    <a-entity id="planet-text-group" position="5 1.6 -0.2" rotation="0 -25 0" show-on-near="target: #rig; distance: 4; duration: 1200">
-      <!-- Fondo negro translúcido (base opacity = 0.4) -->
-      <a-plane id="planet-text-bg"
-               width="3.6" height="3.1"
-               color="#000000"
-               material="transparent: true; opacity: 0.4">
-      </a-plane>
+    <!-- Pedestal bajo el planeta (SIEMPRE visible) -->
+    <a-entity id="planet-pedestal" position="3 0 -2" shadow="cast: true; receive: true">
+      <a-cylinder position="0 0.05 0" radius="1.05" height="0.1" color="#7f8994" material="metalness: 0.2; roughness: 0.85" shadow="receive: true"></a-cylinder>
+      <a-cylinder position="0 0.3 0"  radius="0.9"  height="0.5" color="#9aa3ad" material="metalness: 0.2; roughness: 0.6"  shadow="cast: true; receive: true"></a-cylinder>
+      <a-cylinder position="0 0.58 0" radius="0.7"  height="0.06" color="#cfd5db" material="metalness: 0.15; roughness: 0.4" shadow="cast: true; receive: true"></a-cylinder>
 
-      <!-- Texto -->
-      <a-entity id="planet-text"
-                position="0 0.2 0.01"
-                text="value: ; align: left; wrapCount: 50; width: 3.5; color: #FFFFFF; opacity: 1">
+      <!-- Voiceover sound (positional). Louder and non-looping -->
+      <a-sound id="planet-voice"
+               src="#planet-voiceover"
+               autoplay="false"
+               loop="false"
+               position="0 1 0"
+               volume="1.8">
+      </a-sound>
+
+      <!-- In-world PLAY/PAUSE button next to pedestal -->
+      <a-entity id="info-play-button" position="0 0.8 1" rotation="0 0 0">
+        <a-plane width="1.2" height="0.45" color="#ffffff"
+                 material="transparent: true; opacity: 0.7"
+                 class="clickable"
+                 toggle-entity-visibility="target: #planet-text-group; label: #info-play-label; sound: #planet-voice; playText: Play; pauseText: Pause" shadow="receive: true">
+        </a-plane>
+        <a-entity id="info-play-label"
+                  position="0 0 0.01"
+                  text="value: Play; align: center; width: 2.2; color: #111; wrapCount: 20">
+        </a-entity>
       </a-entity>
     </a-entity>
 
-    <!-- BIG SCREEN with the video + in-world button -->
-    <a-entity position="2.8 0 5" rotation="0 180 0">
-      <!-- Background frame behind the video -->
-      <a-plane position="0 3 -2.02" width="8.6" height="4.6" color="#111" material="opacity: 0.6; transparent: true"></a-plane>
+    <!-- Texto + fondo (grupo) — controlado por el botón (empieza oculto) -->
+    <a-entity id="planet-text-group"
+              position="5 1.6 -0.2"
+              rotation="0 -25 0"
+              visible="false" shadow="receive: true">
+      <a-plane id="planet-text-bg" width="3.6" height="3.1" color="#000000" material="transparent: true; opacity: 0.45"></a-plane>
+      <a-entity id="planet-text" position="0 0.2 0.01"
+                text="value: ; align: left; wrapCount: 50; width: 3.5; color: #FFFFFF; opacity: 1"></a-entity>
+    </a-entity>
 
-      <!-- The actual video surface -->
+    <!-- BIG SCREEN with the video + in-world mute/unmute button -->
+    <a-entity position="2.8 0 5" rotation="0 180 0" shadow="cast: false; receive: true">
+      <!-- Background frame behind the video (receives light/shadows) -->
+      <a-plane id="screen-frame" position="0 3 -2.02" width="8.6" height="4.6" color="#111"
+               material="metalness: 0.1; roughness: 0.9" shadow="receive: true"></a-plane>
+
+      <!-- The actual video surface (lit so the spotlight affects it) -->
       <a-video id="video-screen"
                src="#museum-video"
                position="0 3 -2"
                width="8"
                height="4.2"
                rotation="0 0 0"
-               material="shader: flat">
+               material="metalness: 0; roughness: 1"
+               shadow="receive: true">
       </a-video>
 
       <!-- In-world mute/unmute button, placed to the lower-right of the screen -->
       <a-entity id="video-audio-button" position="3.9 0.8 -1.95" rotation="0 0 0">
-        <!-- Button body -->
-        <a-plane width="1.2" height="0.45" color="#ffffff" material="transparent: true; opacity: 0.7" 
+        <a-plane width="1.2" height="0.45" color="#ffffff" material="transparent: true; opacity: 0.7"
                  class="clickable"
                  video-audio-toggle="video: #museum-video; label: #video-audio-label"></a-plane>
-        <!-- Button label -->
-        <a-entity id="video-audio-label"
-                  position="0 0 0.01"
-                  text="value: Unmute; align: center; width: 2.2; color: #111; wrapCount: 20">
-        </a-entity>
+        <a-entity id="video-audio-label" position="0 0 0.01"
+                  text="value: Unmute; align: center; width: 2.2; color: #111; wrapCount: 20"></a-entity>
       </a-entity>
     </a-entity>
 
-    <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
+    <!-- Museum shell receives shadows -->
+    <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
-    <!-- Cámara -->
-    <a-entity id="rig" position="0 1.6 4" wasd-controls>
-      <!-- Mouse ray cursor works for desktop; in VR, default controller lasers will click too -->
-      <a-entity camera look-controls cursor="rayOrigin: mouse"></a-entity>
+    <!-- Cámara (WASD + look on the SAME entity) -->
+    <a-entity id="rig" position="0 1.6 4">
+      <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
   </a-scene>
 
@@ -299,12 +363,32 @@
   }
   document.addEventListener("click", playSound, { once: true });
 
+  // One-time audio unlock + voiceover prime (so first click on Play works)
+  function unlockAndPrimeVoice() {
+    const scene = document.querySelector('a-scene');
+    try {
+      const ctx = scene && scene.audioListener && scene.audioListener.context;
+      if (ctx && ctx.state !== 'running') ctx.resume();
+    } catch(e) {}
+    const voice = document.querySelector('#planet-voice');
+    if (voice && voice.components && voice.components.sound) {
+      try {
+        // Start & immediately pause to prime buffer and unlock audio
+        voice.components.sound.stopSound();
+        voice.components.sound.playSound();
+        voice.components.sound.pauseSound();
+      } catch(e) {}
+    }
+  }
+  document.addEventListener('click', unlockAndPrimeVoice, { once: true, passive: true });
+  document.addEventListener('touchend', unlockAndPrimeVoice, { once: true, passive: true });
+
   // Ensure the video starts (muted autoplay should work; also retry on user gesture)
   const vid = document.getElementById('museum-video');
   function tryPlayVideo() {
     if (!vid) return;
     const p = vid.play();
-    if (p && typeof p.then === 'function') p.catch(()=>{ /* ignore */ });
+    if (p && typeof p.then === 'function') p.catch(()=>{});
   }
   if (vid) {
     tryPlayVideo();
@@ -313,7 +397,7 @@
     document.addEventListener('touchend', resume, { passive: true });
   }
 
-  // Text content
+  // Texto largo asignado vía JS
   const txt = `Over three billion years ago, Earth was a very different place: young oceans, almost no oxygen, and layers of water where light filtered gently down. In that setting, life began to use sunlight in simple ways.
 
 Among those early light-users were the purple bacteria. They carry out photosynthesis without releasing oxygen. Instead of splitting water, they use substances like hydrogen sulphide or organic compounds. That’s why they thrive where there is light but little oxygen—in microbial mats and stratified waters. They offer a glimpse of what photosynthesis may have looked like before the version that oxygenated the planet.
@@ -327,3 +411,5 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
   </script>
 </body>
 </html>
+
+
