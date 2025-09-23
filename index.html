@@ -80,7 +80,6 @@
       if (el.components && el.components.text) {
         const txtAttr = el.getAttribute('text') || {};
         const base = (typeof txtAttr.opacity === 'number') ? txtAttr.opacity : 1;
-        // Use a small holder object as the key to distinguish from material
         const key = { type: 'text', el };
         el.__textBaseKey = key;
         this._base.set(key, base);
@@ -107,42 +106,85 @@
       Array.from(this.el.children).forEach(child => this.setOpacityForEl(child, value));
     },
 
-setOpacityForEl(el, value) {
-  // Meshes
-  const mesh = el.getObject3D('mesh');
-  if (mesh) {
-    mesh.traverse(node => {
-      if (node.isMesh && node.material) {
-        const mats = Array.isArray(node.material) ? node.material : [node.material];
-        mats.forEach(m => {
-          const base = this._base.get(m) ?? 1;
-          const v = base * value;
-          m.transparent = v < 1 || base < 1;
-          m.opacity = v;
-          if (m.alphaTest) m.alphaTest = Math.min(m.alphaTest, 0.01);
-          m.needsUpdate = true;
+    setOpacityForEl(el, value) {
+      // Meshes
+      const mesh = el.getObject3D('mesh');
+      if (mesh) {
+        mesh.traverse(node => {
+          if (node.isMesh && node.material) {
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(m => {
+              const base = this._base.get(m) ?? 1;
+              const v = base * value;
+              m.transparent = v < 1 || base < 1;
+              m.opacity = v;
+              if (m.alphaTest) m.alphaTest = Math.min(m.alphaTest, 0.01);
+              m.needsUpdate = true;
+            });
+          }
         });
       }
-    });
-  }
 
-  // Material component (e.g., <a-plane>)
-  if (el.components && el.components.material) {
-    const base = this._base.get(el) ?? 1;
-    const v = base * value;
-    el.setAttribute('material', 'transparent', v < 1 || base < 1);
-    el.setAttribute('material', 'opacity', v);
-  }
+      // Material component (e.g., <a-plane>)
+      if (el.components && el.components.material) {
+        const base = this._base.get(el) ?? 1;
+        const v = base * value;
+        el.setAttribute('material', 'transparent', v < 1 || base < 1);
+        el.setAttribute('material', 'opacity', v);
+      }
 
-  // Text component (fade always 0 → 1)
-  if (el.components && el.components.text) {
-    const current = el.getAttribute('text') || {};
-    el.setAttribute('text', Object.assign({}, current, { opacity: value }));
-  }
+      // Text component (fade always 0 → 1)
+      if (el.components && el.components.text) {
+        const current = el.getAttribute('text') || {};
+        el.setAttribute('text', Object.assign({}, current, { opacity: value }));
+      }
 
-  // Recurse into children
-  Array.from(el.children).forEach(child => this.setOpacityForEl(child, value));
-}
+      // Recurse into children
+      Array.from(el.children).forEach(child => this.setOpacityForEl(child, value));
+    }
+  });
+
+  // In-world video audio toggle component
+  AFRAME.registerComponent('video-audio-toggle', {
+    schema: {
+      video: { type: 'selector' },     // <video> asset element
+      label: { type: 'selector' }      // text entity to update
+    },
+    init() {
+      this._onClick = this.onClick.bind(this);
+      this._onEnter = () => this.el.setAttribute('material', 'opacity', 0.9);
+      this._onLeave = () => this.el.setAttribute('material', 'opacity', 0.7);
+      this.el.addEventListener('click', this._onClick);
+      this.el.addEventListener('mouseenter', this._onEnter);
+      this.el.addEventListener('mouseleave', this._onLeave);
+      this.updateLabel();
+    },
+    playVideo() {
+      const v = this.data.video;
+      if (!v) return;
+      const p = v.play();
+      if (p && typeof p.then === 'function') p.catch(()=>{ /* ignore */ });
+    },
+    onClick() {
+      const v = this.data.video;
+      if (!v) return;
+      this.playVideo();        // ensure playing after a user gesture
+      v.muted = !v.muted;      // toggle
+      if (!v.muted && v.volume === 0) v.volume = 0.8;
+      this.updateLabel();
+    },
+    updateLabel() {
+      const v = this.data.video, label = this.data.label;
+      if (!v || !label) return;
+      const isMuted = v.muted || v.volume === 0;
+      const current = label.getAttribute('text') || {};
+      label.setAttribute('text', Object.assign({}, current, { value: isMuted ? 'Unmute' : 'Mute' }));
+    },
+    remove() {
+      this.el.removeEventListener('click', this._onClick);
+      this.el.removeEventListener('mouseenter', this._onEnter);
+      this.el.removeEventListener('mouseleave', this._onLeave);
+    }
   });
   </script>
 </head>
@@ -157,6 +199,16 @@ setOpacityForEl(el, value) {
       <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
       <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
       <a-asset-item id="mdl-techo_paredes_2" src="./asset/paredes_suelo_textura_museo.glb"></a-asset-item>
+
+      <!-- VIDEO ASSET (muted for autoplay) -->
+      <video id="museum-video"
+             src="./asset/purple_bacteria_screen_video.mp4"
+             loop
+             muted
+             playsinline
+             crossorigin="anonymous"
+             preload="auto">
+      </video>
     </a-assets>
 
     <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.4" position="0 1.6 0"></a-sound>
@@ -195,10 +247,40 @@ setOpacityForEl(el, value) {
       </a-entity>
     </a-entity>
 
+    <!-- BIG SCREEN with the video + in-world button -->
+    <a-entity position="2.8 0 5" rotation="0 180 0">
+      <!-- Background frame behind the video -->
+      <a-plane position="0 3 -2.02" width="8.6" height="4.6" color="#111" material="opacity: 0.6; transparent: true"></a-plane>
+
+      <!-- The actual video surface -->
+      <a-video id="video-screen"
+               src="#museum-video"
+               position="0 3 -2"
+               width="8"
+               height="4.2"
+               rotation="0 0 0"
+               material="shader: flat">
+      </a-video>
+
+      <!-- In-world mute/unmute button, placed to the lower-right of the screen -->
+      <a-entity id="video-audio-button" position="3.9 0.8 -1.95" rotation="0 0 0">
+        <!-- Button body -->
+        <a-plane width="1.2" height="0.45" color="#ffffff" material="transparent: true; opacity: 0.7" 
+                 class="clickable"
+                 video-audio-toggle="video: #museum-video; label: #video-audio-label"></a-plane>
+        <!-- Button label -->
+        <a-entity id="video-audio-label"
+                  position="0 0 0.01"
+                  text="value: Unmute; align: center; width: 2.2; color: #111; wrapCount: 20">
+        </a-entity>
+      </a-entity>
+    </a-entity>
+
     <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer></a-entity>
 
     <!-- Cámara -->
     <a-entity id="rig" position="0 1.6 4" wasd-controls>
+      <!-- Mouse ray cursor works for desktop; in VR, default controller lasers will click too -->
       <a-entity camera look-controls cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
   </a-scene>
@@ -208,22 +290,35 @@ setOpacityForEl(el, value) {
   <!-- ********************************* -->
   
   <script>
-  // Música
+  // Background music (start on first user interaction once)
   function playSound() {
     const sound = document.querySelector("#bg-sound");
     if (sound && sound.components && sound.components.sound) {
       sound.components.sound.playSound();
     }
   }
-  document.addEventListener("click", playSound);
+  document.addEventListener("click", playSound, { once: true });
 
-  // Texto largo asignado vía JS
+  // Ensure the video starts (muted autoplay should work; also retry on user gesture)
+  const vid = document.getElementById('museum-video');
+  function tryPlayVideo() {
+    if (!vid) return;
+    const p = vid.play();
+    if (p && typeof p.then === 'function') p.catch(()=>{ /* ignore */ });
+  }
+  if (vid) {
+    tryPlayVideo();
+    const resume = () => { tryPlayVideo(); document.removeEventListener('click', resume); document.removeEventListener('touchend', resume); };
+    document.addEventListener('click', resume, { passive: true });
+    document.addEventListener('touchend', resume, { passive: true });
+  }
+
+  // Text content
   const txt = `Over three billion years ago, Earth was a very different place: young oceans, almost no oxygen, and layers of water where light filtered gently down. In that setting, life began to use sunlight in simple ways.
 
 Among those early light-users were the purple bacteria. They carry out photosynthesis without releasing oxygen. Instead of splitting water, they use substances like hydrogen sulphide or organic compounds. That’s why they thrive where there is light but little oxygen—in microbial mats and stratified waters. They offer a glimpse of what photosynthesis may have looked like before the version that oxygenated the planet.
 
 Much later came the cyanobacteria with the “modern” form of photosynthesis that does release oxygen, triggering the Great Oxidation around 2.4 billion years ago—a leap that changed the air and the oceans for good.`;
-
   const textEl = document.querySelector('#planet-text');
   if (textEl) {
     const current = textEl.getAttribute('text') || {};
@@ -232,4 +327,3 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
   </script>
 </body>
 </html>
-
