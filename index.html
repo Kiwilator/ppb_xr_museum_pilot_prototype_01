@@ -186,10 +186,9 @@
         t.setAttribute('visible', true);
         if (soundCmp) {
           try {
-            // If ended or not playing yet, restart clean; else resume
             if (!soundCmp.isPlaying) {
-              soundCmp.stopSound();   // resets offset on all platforms
-              soundCmp.playSound();   // play from start
+              soundCmp.stopSound();
+              soundCmp.playSound();
             }
           } catch(e) {}
         }
@@ -213,6 +212,105 @@
       this.el.removeEventListener('mouseleave', this._onLeave);
     }
   });
+
+  /* ============================================
+     NEW: "Lava lamp" color drift for GLTF meshes
+     - Smoothly cycles hue within a range (blue→purple)
+     - Gentle variation in saturation and lightness
+     - Works on textured materials (multiplies base color)
+  ============================================ */
+  AFRAME.registerComponent('lava-lamp-color', {
+    schema: {
+      // Hue range [0..1] (HSL). Defaults ≈ blue (0.62) → purple (0.78).
+      hueMin:   {default: 0.62},
+      hueMax:   {default: 0.78},
+      // Base saturation/lightness and breathing amplitudes.
+      sat:      {default: 0.85},
+      light:    {default: 0.55},
+      satAmp:   {default: 0.10},  // ± around base
+      lightAmp: {default: 0.08},  // ± around base
+      // Overall animation speed (cycles per second-ish).
+      speed:    {default: 0.08},
+      // Emissive strength so it “reads” under dim light.
+      emissive: {default: 0.35},
+      // Optional opacity breathing (0 disables).
+      opacityBreath: {default: 0.0}
+    },
+    init() {
+      this._materials = [];
+      this.captureMaterials = this.captureMaterials.bind(this);
+      this.applyColor = this.applyColor.bind(this);
+
+      this.el.addEventListener('model-loaded', this.captureMaterials);
+      this.el.addEventListener('object3dset', this.captureMaterials);
+      this.captureMaterials();
+
+      // Prime initial color.
+      const c = new THREE.Color();
+      c.setHSL(this.data.hueMin, this.data.sat, this.data.light);
+      this.applyColor(c, 1.0);
+    },
+    captureMaterials() {
+      this._materials.length = 0;
+      const mesh = this.el.getObject3D('mesh');
+      if (!mesh) return;
+      mesh.traverse(n => {
+        if (n.isMesh && n.material) {
+          const mats = Array.isArray(n.material) ? n.material : [n.material];
+          mats.forEach(m => {
+            m.transparent = true; // allow subtle opacity breathing
+            m.needsUpdate = true;
+            this._materials.push(m);
+          });
+        }
+      });
+    },
+    // Small helper for smoother curves (easeInOut cubic-like)
+    _smooth(u){ return u*u*(3 - 2*u); },
+
+    tick(timeMs) {
+      if (!this._materials.length) return;
+
+      const t = (timeMs || 0) / 1000;
+      const d = this.data;
+
+      // Blend a few sines with incommensurate frequencies to avoid repetition.
+      const w  = d.speed * Math.PI * 2;
+      const s1 = (Math.sin(w * t) + 1) * 0.5;            // 0..1
+      const s2 = (Math.sin(w * 0.63 * t + 1.7) + 1) * 0.5;
+      const s3 = (Math.sin(w * 0.41 * t - 0.9) + 1) * 0.5;
+      // Weighted mix and smoothstep-ish shaping
+      let uHue = this._smooth( (s1*0.60 + s2*0.25 + s3*0.15) );
+      const hue = THREE.MathUtils.lerp(d.hueMin, d.hueMax, uHue);
+
+      // Gentle breathing on saturation and lightness
+      const sat   = THREE.MathUtils.clamp(d.sat + d.satAmp   * (s2 - 0.5) * 2, 0, 1);
+      const light = THREE.MathUtils.clamp(d.light + d.lightAmp* (s3 - 0.5) * 2, 0, 1);
+
+      // Optional subtle opacity breathing
+      const op = d.opacityBreath > 0 ? THREE.MathUtils.clamp(1.0 - d.opacityBreath*0.5 + d.opacityBreath*0.5*Math.sin(w*0.33*t), 0.5, 1) : 1.0;
+
+      const color = new THREE.Color();
+      color.setHSL(hue, sat, light);
+
+      this.applyColor(color, op);
+    },
+    applyColor(color, opacity) {
+      const emissiveStrength = this.data.emissive;
+      this._materials.forEach(m => {
+        if (m.color) m.color.copy(color);          // tint base/albedo
+        if (m.emissive) {
+          m.emissive.copy(color).multiplyScalar(emissiveStrength);
+        }
+        if (typeof opacity === 'number') m.opacity = opacity;
+        m.needsUpdate = true;
+      });
+    },
+    remove() {
+      this.el.removeEventListener('model-loaded', this.captureMaterials);
+      this.el.removeEventListener('object3dset', this.captureMaterials);
+    }
+  });
   </script>
 </head>
   
@@ -223,13 +321,16 @@
     fog="type: exponential; color: #7a8793; density: 0.14"
   >
     <a-assets timeout="15000">
-      <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
-      <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
-      <a-asset-item id="mdl-techo_paredes_2" src="./asset/paredes_suelo_textura_museo.glb"></a-asset-item>
+      <a-asset-item id="mdl-cristales" src="./assets/cristales_bacterias_2.glb"></a-asset-item>
+      <a-asset-item id="planeta_museo_exterior" src="./assets/planeta_museo_central.glb"></a-asset-item>
+      <a-asset-item id="mdl-techo_paredes_2" src="./assets/paredes_suelo_textura_museo.glb"></a-asset-item>
+      <a-asset-item id="museum_floor_dark" src="./assets/museum_floor_light.glb"></a-asset-item>
+      <a-asset-item id="animacion_bacteria_color" src="./assets/ANIMACION_bacteria_color_2.glb"></a-asset-item>
+      <a-asset-item id="Purple_Elixir_Cylinder" src="./assets/Purple_Elixir_Cylinder.glb"></a-asset-item>
 
       <!-- VIDEO ASSET (muted for autoplay) -->
       <video id="museum-video"
-             src="./asset/purple_bacteria_screen_video.mp4"
+             src="./assets/purple_bacteria_screen_video.mp4"
              loop
              muted
              playsinline
@@ -238,7 +339,7 @@
       </video>
 
       <!-- VOICEOVER AUDIO ASSET -->
-      <audio id="planet-voiceover" src="./asset/planet_voiceover_01.mp3" preload="auto"></audio>
+      <audio id="planet-voiceover" src="./assets/planet_voiceover_01.mp3" preload="auto"></audio>
     </a-assets>
 
     <!-- Global lights — darker mood -->
@@ -258,7 +359,7 @@
     </a-entity>
 
     <!-- Background music -->
-    <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
+    <a-sound id="bg-sound" src="./assets/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
     <!-- Modelos -->
     <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
@@ -272,6 +373,23 @@
               show-on-near="target: #camera; distance: 4; duration: 1200"
               animation__rotation="property: rotation; to: 5 5 600; loop: true; dur: 20000; easing: linear"
               animation__float="property: position; dir: alternate; dur: 4000; easing: easeInOutSine; loop: true; to: 3 2.05 0">
+    </a-entity>
+
+    <!-- Estatua Animación (now with lava-lamp color drift) -->
+    <a-entity id="animation_statue"
+              gltf-model="#animacion_bacteria_color"
+              position="0 2.6 -10.5"
+              scale="1.8 1.8 1.8"
+              shadow="cast: true; receive: true"
+              lava-lamp-color="hueMin: 0.62; hueMax: 0.78; sat: 0.9; light: 0.55; satAmp: 0.12; lightAmp: 0.1; speed: 0.08; emissive: 0.35; opacityBreath: 0">
+    </a-entity>
+
+    <!-- Estatua Cilindro de Elixir -->
+    <a-entity id="Elixir_Cylinder"
+              gltf-model="#Purple_Elixir_Cylinder"
+              position="6.5 2.3 -10.7"
+              scale="2 2 2"
+              shadow="cast: true; receive: true">
     </a-entity>
 
     <!-- Pedestal bajo el planeta (SIEMPRE visible) -->
@@ -343,6 +461,9 @@
     <!-- Museum shell receives shadows -->
     <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
+    <!-- Museum Floor receives shadows -->
+    <a-entity gltf-model="#museum_floor_dark" position="0 6.05 9" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
+
     <!-- Cámara (WASD + look on the SAME entity) -->
     <a-entity id="rig" position="0 1.6 4">
       <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
@@ -373,7 +494,6 @@
     const voice = document.querySelector('#planet-voice');
     if (voice && voice.components && voice.components.sound) {
       try {
-        // Start & immediately pause to prime buffer and unlock audio
         voice.components.sound.stopSound();
         voice.components.sound.playSound();
         voice.components.sound.pauseSound();
@@ -411,5 +531,6 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
   </script>
 </body>
 </html>
+
 
 
