@@ -321,16 +321,16 @@
     fog="type: exponential; color: #7a8793; density: 0.14"
   >
     <a-assets timeout="15000">
-      <a-asset-item id="mdl-cristales" src="./assets/cristales_bacterias_2.glb"></a-asset-item>
-      <a-asset-item id="planeta_museo_exterior" src="./assets/planeta_museo_central.glb"></a-asset-item>
-      <a-asset-item id="mdl-techo_paredes_2" src="./assets/paredes_suelo_textura_museo.glb"></a-asset-item>
-      <a-asset-item id="museum_floor_dark" src="./assets/museum_floor_light.glb"></a-asset-item>
-      <a-asset-item id="animacion_bacteria_color" src="./assets/ANIMACION_bacteria_color_2.glb"></a-asset-item>
-      <a-asset-item id="Purple_Elixir_Cylinder" src="./assets/Purple_Elixir_Cylinder.glb"></a-asset-item>
+      <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
+      <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
+      <a-asset-item id="mdl-techo_paredes_2" src="./asset/paredes_suelo_textura_museo.glb"></a-asset-item>
+      <a-asset-item id="museum_floor_dark" src="./asset/museum_floor_light.glb"></a-asset-item>
+      <a-asset-item id="animacion_bacteria_color" src="./asset/ANIMACION_bacteria_color_2.glb"></a-asset-item>
+      <a-asset-item id="Purple_Elixir_Cylinder" src="./asset/Purple_Elixir_Cylinder.glb"></a-asset-item>
 
       <!-- VIDEO ASSET (muted for autoplay) -->
       <video id="museum-video"
-             src="./assets/purple_bacteria_screen_video.mp4"
+             src="./asset/purple_bacteria_screen_video.mp4"
              loop
              muted
              playsinline
@@ -339,7 +339,7 @@
       </video>
 
       <!-- VOICEOVER AUDIO ASSET -->
-      <audio id="planet-voiceover" src="./assets/planet_voiceover_01.mp3" preload="auto"></audio>
+      <audio id="planet-voiceover" src="./asset/planet_voiceover_01.mp3" preload="auto"></audio>
     </a-assets>
 
     <!-- Global lights — darker mood -->
@@ -359,7 +359,7 @@
     </a-entity>
 
     <!-- Background music -->
-    <a-sound id="bg-sound" src="./assets/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
+    <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
     <!-- Modelos -->
     <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
@@ -531,6 +531,7 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
   </script>
 </body>
 </html>
+
 
 
 
