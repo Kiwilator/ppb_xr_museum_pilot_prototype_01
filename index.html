@@ -338,8 +338,10 @@
              preload="auto">
       </video>
 
-      <!-- VOICEOVER AUDIO ASSET -->
+      <!-- VOICEOVER AUDIO ASSETS -->
       <audio id="planet-voiceover" src="./asset/planet_voiceover_01.mp3" preload="auto"></audio>
+      <audio id="museum-voiceover-1" src="./asset/museum_voiceover_1.mpeg" preload="auto"></audio>
+      <audio id="museum-voiceover-2" src="./asset/museum_voiceover_2.mpeg" preload="auto"></audio>
     </a-assets>
 
     <!-- Global lights — darker mood -->
@@ -383,6 +385,42 @@
               shadow="cast: true; receive: true"
               lava-lamp-color="hueMin: 0.62; hueMax: 0.78; sat: 0.9; light: 0.55; satAmp: 0.12; lightAmp: 0.1; speed: 0.08; emissive: 0.35; opacityBreath: 0">
     </a-entity>
+
+    <!-- NEW: Statue voiceover, text group and Play button -->
+    <a-sound id="statue-voice"
+             src="#museum-voiceover-2"
+             autoplay="false"
+             loop="false"
+             position="0 2.2 -10.5"
+             volume="1.8">
+    </a-sound>
+
+    <a-entity id="statue-text-group"
+              position="-2.1 2.1 -9"
+              rotation="0 10 0"
+              visible="false"
+              shadow="receive: true">
+      <a-plane width="3.8" height="3.8" color="#000000"
+               material="transparent: true; opacity: 0.45"></a-plane>
+      <a-entity id="statue-text"
+                position="0 0.4 0.01"
+                text="value: ; align: left; wrapCount: 52; width: 3.6; color: #FFFFFF; opacity: 1">
+      </a-entity>
+    </a-entity>
+
+    <a-entity id="statue-play-button" position="0 1.2 -9.0" rotation="0 0 0">
+      <a-plane width="1.2" height="0.45" color="#ffffff"
+               material="transparent: true; opacity: 0.7"
+               class="clickable"
+               toggle-entity-visibility="target: #statue-text-group; label: #statue-play-label; sound: #statue-voice; playText: Play; pauseText: Pause"
+               shadow="receive: true">
+      </a-plane>
+      <a-entity id="statue-play-label"
+                position="0 0 0.01"
+                text="value: Play; align: center; width: 2.2; color: #111; wrapCount: 20">
+      </a-entity>
+    </a-entity>
+    <!-- /NEW statue block -->
 
     <!-- Estatua Cilindro de Elixir -->
     <a-entity id="Elixir_Cylinder"
@@ -464,6 +502,47 @@
     <!-- Museum Floor receives shadows -->
     <a-entity gltf-model="#museum_floor_dark" position="0 6.05 9" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
+    <!-- ============================== -->
+    <!-- NEW: ELIXIR PLAY BUTTON + TEXT -->
+    <!-- ============================== -->
+
+    <!-- Positional voiceover for the Elixir text panel -->
+    <a-sound id="elixir-voice"
+             src="#museum-voiceover-1"
+             autoplay="false"
+             loop="false"
+             position="6.5 2.0 -10.7"
+             volume="1.8">
+    </a-sound>
+
+    <!-- Text panel (hidden by default), slightly to the right of the cylinder -->
+    <a-entity id="elixir-text-group"
+              position="8.4 2.1 -9"
+              rotation="0 -15 0"
+              visible="false"
+              shadow="receive: true">
+      <a-plane width="3.6" height="3.4" color="#000000"
+               material="transparent: true; opacity: 0.45"></a-plane>
+      <a-entity id="elixir-text"
+                position="0 0 0.01"
+                text="value: ; align: left; wrapCount: 50; width: 3.5; color: #FFFFFF; opacity: 1">
+      </a-entity>
+    </a-entity>
+
+    <!-- Play/Pause button placed IN FRONT of the Elixir Cylinder (toward the camera) -->
+    <a-entity id="elixir-play-button" position="6.5 1.2 -9.2" rotation="0 0 0">
+      <a-plane width="1.2" height="0.45" color="#ffffff"
+               material="transparent: true; opacity: 0.7"
+               class="clickable"
+               toggle-entity-visibility="target: #elixir-text-group; label: #elixir-play-label; sound: #elixir-voice; playText: Play; pauseText: Pause"
+               shadow="receive: true">
+      </a-plane>
+      <a-entity id="elixir-play-label"
+                position="0 0 0.01"
+                text="value: Play; align: center; width: 2.2; color: #111; wrapCount: 20">
+      </a-entity>
+    </a-entity>
+
     <!-- Cámara (WASD + look on the SAME entity) -->
     <a-entity id="rig" position="0 1.6 4">
       <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
@@ -491,12 +570,31 @@
       const ctx = scene && scene.audioListener && scene.audioListener.context;
       if (ctx && ctx.state !== 'running') ctx.resume();
     } catch(e) {}
+    // Prime planet voice
     const voice = document.querySelector('#planet-voice');
     if (voice && voice.components && voice.components.sound) {
       try {
         voice.components.sound.stopSound();
         voice.components.sound.playSound();
         voice.components.sound.pauseSound();
+      } catch(e) {}
+    }
+    // Prime elixir voice
+    const elixirVoice = document.querySelector('#elixir-voice');
+    if (elixirVoice && elixirVoice.components && elixirVoice.components.sound) {
+      try {
+        elixirVoice.components.sound.stopSound();
+        elixirVoice.components.sound.playSound();
+        elixirVoice.components.sound.pauseSound();
+      } catch(e) {}
+    }
+    // Prime statue voice (NEW)
+    const statueVoice = document.querySelector('#statue-voice');
+    if (statueVoice && statueVoice.components && statueVoice.components.sound) {
+      try {
+        statueVoice.components.sound.stopSound();
+        statueVoice.components.sound.playSound();
+        statueVoice.components.sound.pauseSound();
       } catch(e) {}
     }
   }
@@ -517,7 +615,7 @@
     document.addEventListener('touchend', resume, { passive: true });
   }
 
-  // Texto largo asignado vía JS
+  // Planet text (existing)
   const txt = `Over three billion years ago, Earth was a very different place: young oceans, almost no oxygen, and layers of water where light filtered gently down. In that setting, life began to use sunlight in simple ways.
 
 Among those early light-users were the purple bacteria. They carry out photosynthesis without releasing oxygen. Instead of splitting water, they use substances like hydrogen sulphide or organic compounds. That’s why they thrive where there is light but little oxygen—in microbial mats and stratified waters. They offer a glimpse of what photosynthesis may have looked like before the version that oxygenated the planet.
@@ -528,10 +626,30 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
     const current = textEl.getAttribute('text') || {};
     textEl.setAttribute('text', Object.assign({}, current, { value: txt }));
   }
+
+  // Elixir text (NEW)
+  const elixirTxt = `Some purple bacteria, specifically the non-sulphur types, are able to produce hydrogen when exposed to light. The process is called photofermentation: instead of needing high temperatures or pressures, these bacteria operate at room temperature and without oxygen, using light energy as the main “engine” and consuming simple organic compounds (for example, organic acids). For this reason, it is considered a pathway with low external energy input compared with industrial methods such as electrolysis, where electricity is the major cost.
+
+In practice, they are grown in photobioreactors: illuminated vessels where light and organic matter “go in” and hydrogen gas “comes out”. Groups such as Rhodobacter and Rhodopseudomonas are the most studied. The advantage is twofold: besides producing H₂, these bacteria can use carbon-rich waste streams (wastewater or agri-food by-products), turning “leftovers” into an energy resource. It is an active line of research within the circular economy and wastewater treatment, precisely because light provides much of the energy the system needs.`;
+  const elixirTextEl = document.querySelector('#elixir-text');
+  if (elixirTextEl) {
+    const current = elixirTextEl.getAttribute('text') || {};
+    elixirTextEl.setAttribute('text', Object.assign({}, current, { value: elixirTxt }));
+  }
+
+  // Statue text (NEW)
+  const statueTxt = `Why purple bacteria change colour
+
+The colour of these bacteria depends on their pigment mix. They contain bacteriochlorophylls, which harvest light and push the tone towards purples/magenta, and carotenoids, which act as photoprotection and add oranges and reds. It isn’t a fixed dye: the cell adjusts how much of each pigment it makes according to its environment—like moving sliders on an equaliser. How those pigments are packed into the light-harvesting complexes also shapes what we see.
+
+Environment drives the shift. Under strong light, cells boost carotenoids as a “sunshade”, and the culture shifts orange, salmon or reddish. Under low light, they increase bacteriochlorophyll and the photosynthetic machinery, and the tone becomes a deeper purple. Oxygen matters too: purple non-sulphur bacteria (e.g., Rhodobacter and Rhodopseudomonas) turn their photosynthetic apparatus on in low-oxygen conditions and look vivid; with aeration, they dial it down and may appear beige. In purple sulphur bacteria, intracellular sulphur granules scatter light and can mute the violet towards browns as granules appear or disappear.
+
+The palette is broad and varies by species and growth stage: pale pink, rose, magenta, violet, and also orange to brick-red or brown when carotenoids dominate or sulphur is present. Nutrients, culture age and temperature fine-tune the shade. In short, the colour isn’t paint—it’s metabolism adapting to light and oxygen—so it works as a simple visual “thermometer” of how these bacteria are operating.`;
+  const statueTextEl = document.querySelector('#statue-text');
+  if (statueTextEl) {
+    const current = statueTextEl.getAttribute('text') || {};
+    statueTextEl.setAttribute('text', Object.assign({}, current, { value: statueTxt }));
+  }
   </script>
 </body>
 </html>
-
-
-
-
