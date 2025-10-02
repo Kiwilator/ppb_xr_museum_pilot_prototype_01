@@ -321,27 +321,30 @@
     fog="type: exponential; color: #7a8793; density: 0.14"
   >
     <a-assets timeout="15000">
-      <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
-      <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
-      <a-asset-item id="mdl-techo_paredes_2" src="./asset/paredes_suelo_textura_museo.glb"></a-asset-item>
-      <a-asset-item id="museum_floor_dark" src="./asset/museum_floor_light.glb"></a-asset-item>
-      <a-asset-item id="animacion_bacteria_color" src="./asset/ANIMACION_bacteria_color_2.glb"></a-asset-item>
-      <a-asset-item id="Purple_Elixir_Cylinder" src="./asset/Purple_Elixir_Cylinder.glb"></a-asset-item>
+      <a-asset-item id="mdl-cristales" src="./assets/cristales_bacterias_2.glb"></a-asset-item>
+      <a-asset-item id="planeta_museo_exterior" src="./assets/planeta_museo_central.glb"></a-asset-item>
+      <a-asset-item id="mdl-techo_paredes_2" src="./assets/paredes_suelo_textura_museo.glb"></a-asset-item>
+      <a-asset-item id="museum_floor_dark" src="./assets/museum_floor_light.glb"></a-asset-item>
+      <a-asset-item id="animacion_bacteria_color" src="./assets/ANIMACION_bacteria_color_2.glb"></a-asset-item>
+      <a-asset-item id="Purple_Elixir_Cylinder" src="./assets/Purple_Elixir_Cylinder.glb"></a-asset-item>
 
       <!-- VIDEO ASSET (muted for autoplay) -->
       <video id="museum-video"
-             src="./asset/purple_bacteria_screen_video.mp4"
+             src="./assets/purple_bacteria_screen_video.mp4"
              loop
              muted
              playsinline
-             crossorigin="anonymous"
+             crossoin="anonymous"
              preload="auto">
       </video>
 
       <!-- VOICEOVER AUDIO ASSETS -->
-      <audio id="planet-voiceover" src="./asset/planet_voiceover_01.mp3" preload="auto"></audio>
-      <audio id="museum-voiceover-1" src="./asset/museum_voiceover_1.mpeg" preload="auto"></audio>
-      <audio id="museum-voiceover-2" src="./asset/museum_voiceover_2.mpeg" preload="auto"></audio>
+      <audio id="planet-voiceover" src="./assets/planet_voiceover_01.mp3" preload="auto"></audio>
+      <audio id="museum-voiceover-1" src="./assets/museum_voiceover_1.mpeg" preload="auto"></audio>
+      <audio id="museum-voiceover-2" src="./assets/museum_voiceover_2.mpeg" preload="auto"></audio>
+
+      <!-- NEW: SPONSORS IMAGE -->
+      <img id="sponsors" src="./assets/sponsors_logos.jpeg" crossoin="anonymous">
     </a-assets>
 
     <!-- Global lights — darker mood -->
@@ -361,7 +364,7 @@
     </a-entity>
 
     <!-- Background music -->
-    <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
+    <a-sound id="bg-sound" src="./assets/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
     <!-- Modelos -->
     <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
@@ -486,7 +489,7 @@
                shadow="receive: true">
       </a-video>
 
-      <!-- In-world mute/unmute button, placed to the lower-right of the screen -->
+      <!-- In-world mute/unmute button, placed to the lower-ht of the screen -->
       <a-entity id="video-audio-button" position="3.9 0.8 -1.95" rotation="0 0 0">
         <a-plane width="1.2" height="0.45" color="#ffffff" material="transparent: true; opacity: 0.7"
                  class="clickable"
@@ -515,7 +518,7 @@
              volume="1.8">
     </a-sound>
 
-    <!-- Text panel (hidden by default), slightly to the right of the cylinder -->
+    <!-- Text panel (hidden by default), slightly to the ht of the cylinder -->
     <a-entity id="elixir-text-group"
               position="8.4 2.1 -9"
               rotation="0 -15 0"
@@ -543,8 +546,29 @@
       </a-entity>
     </a-entity>
 
+    <!-- ============================== -->
+    <!-- NEW: SPONSORS WALL (image panel) -->
+    <!-- ============================== -->
+    <!-- Placed to the ht side of the big screen wall, slightly tilted -->
+    <a-entity id="sponsors-wall" position="10.1 2 -2" rotation="0 -90 0" shadow="receive: true">
+      <!-- Frame behind the logos -->
+      <a-plane width="3.2" height="2.0" color="#0d0f12"
+               material="metalness: 0.1; roughness: 0.9"
+               position="0 0 -0.02"
+               shadow="receive: true"></a-plane>
+      <!-- The sponsors image itself -->
+      <a-image src="#sponsors"
+               width="3.0" height="1.8"
+               material="shader: standard; metalness: 0.0; roughness: 0.95"
+               shadow="receive: true"></a-image>
+      <!-- Soft area light feel via emissive overlay (optional, subtle glow) -->
+      <a-plane width="3.0" height="1.8" position="0 0 0.01"
+               material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
+    </a-entity>
+    <!-- ============================== -->
+
     <!-- Cámara (WASD + look on the SAME entity) -->
-    <a-entity id="rig" position="0 1.6 4">
+    <a-entity id="" position="7.5 2 -2" rotation="0 -90 0">
       <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
   </a-scene>
@@ -653,3 +677,4 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
+
