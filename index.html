@@ -227,8 +227,8 @@
       // Base saturation/lightness and breathing amplitudes.
       sat:      {default: 0.85},
       light:    {default: 0.55},
-      satAmp:   {default: 0.10},  // ± around base
-      lightAmp: {default: 0.08},  // ± around base
+      satAmp:   {default: 0.10},
+      lightAmp: {default: 0.08},
       // Overall animation speed (cycles per second-ish).
       speed:    {default: 0.08},
       // Emissive strength so it “reads” under dim light.
@@ -265,7 +265,6 @@
         }
       });
     },
-    // Small helper for smoother curves (easeInOut cubic-like)
     _smooth(u){ return u*u*(3 - 2*u); },
 
     tick(timeMs) {
@@ -274,20 +273,17 @@
       const t = (timeMs || 0) / 1000;
       const d = this.data;
 
-      // Blend a few sines with incommensurate frequencies to avoid repetition.
       const w  = d.speed * Math.PI * 2;
-      const s1 = (Math.sin(w * t) + 1) * 0.5;            // 0..1
+      const s1 = (Math.sin(w * t) + 1) * 0.5;
       const s2 = (Math.sin(w * 0.63 * t + 1.7) + 1) * 0.5;
       const s3 = (Math.sin(w * 0.41 * t - 0.9) + 1) * 0.5;
-      // Weighted mix and smoothstep-ish shaping
+
       let uHue = this._smooth( (s1*0.60 + s2*0.25 + s3*0.15) );
       const hue = THREE.MathUtils.lerp(d.hueMin, d.hueMax, uHue);
 
-      // Gentle breathing on saturation and lightness
       const sat   = THREE.MathUtils.clamp(d.sat + d.satAmp   * (s2 - 0.5) * 2, 0, 1);
       const light = THREE.MathUtils.clamp(d.light + d.lightAmp* (s3 - 0.5) * 2, 0, 1);
 
-      // Optional subtle opacity breathing
       const op = d.opacityBreath > 0 ? THREE.MathUtils.clamp(1.0 - d.opacityBreath*0.5 + d.opacityBreath*0.5*Math.sin(w*0.33*t), 0.5, 1) : 1.0;
 
       const color = new THREE.Color();
@@ -298,7 +294,7 @@
     applyColor(color, opacity) {
       const emissiveStrength = this.data.emissive;
       this._materials.forEach(m => {
-        if (m.color) m.color.copy(color);          // tint base/albedo
+        if (m.color) m.color.copy(color);
         if (m.emissive) {
           m.emissive.copy(color).multiplyScalar(emissiveStrength);
         }
@@ -316,7 +312,7 @@
   
 <body>
   <a-scene
-    renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 0.85; shadowMap: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 0.85; shadowMap: true;"
     background="color: #9aa7b3"
     fog="type: exponential; color: #7a8793; density: 0.14"
   >
@@ -324,6 +320,7 @@
       <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
       <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
       <a-asset-item id="mdl-techo_paredes_2" src="./asset/paredes_suelo_textura_museo.glb"></a-asset-item>
+      <a-asset-item id="museum_roof" src="./asset/museum_roof.glb"></a-asset-item>
       <a-asset-item id="museum_floor_dark" src="./asset/museum_floor_light.glb"></a-asset-item>
       <a-asset-item id="animacion_bacteria_color" src="./asset/ANIMACION_bacteria_color_2.glb"></a-asset-item>
       <a-asset-item id="Purple_Elixir_Cylinder" src="./asset/Purple_Elixir_Cylinder.glb"></a-asset-item>
@@ -351,23 +348,74 @@
     <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
     <a-entity light="type: hemisphere; intensity: 0.12; color: #dfe7ef; groundColor: #39454f"></a-entity>
 
+    <!-- ============================================== -->
+    <!-- SPOTLIGHTS — one per major element (like planet) -->
+    <!-- ============================================== -->
+
     <!-- BIG SCREEN spotlight (aimed at the screen) -->
     <a-entity id="screen-spot"
               position="2 4 2"
-              light="type: spot; intensity: 3; angle: 30; penumbra: 0.6; distance: 24; decay: 1; color: #ffffff; castShadow: true; target: #video-screen">
+              light="type: spot; intensity: 3; angle: 30; penumbra: 0.6; distance: 24; decay: 1; color: #ffffff; castShadow: false; target: #video-screen">
     </a-entity>
 
     <!-- PLANET spotlight (aimed at the planet) -->
     <a-entity id="planet-spot"
               position="3 4 0.8"
-              light="type: spot; intensity: 2.8; angle: 35; penumbra: 0.6; distance: 18; decay: 1; color: #fff3e6; castShadow: true; target: #planet">
+              light="type: spot; intensity: 2.8; angle: 35; penumbra: 0.6; distance: 18; decay: 1; color: #fff3e6; castShadow: false; target: #planet">
     </a-entity>
+
+    <!-- STATUE spotlight -->
+    <a-entity id="statue-spot"
+              position="-2.2 4.2 -8.4"
+              light="type: spot; intensity: 2.6; angle: 32; penumbra: 0.55; distance: 20; decay: 1; color: #eae8ff; castShadow: false; target: #animation_statue">
+    </a-entity>
+
+    <!-- ELIXIR CYLINDER spotlight -->
+    <a-entity id="elixir-spot"
+              position="6.3 4.4 -8.2"
+              light="type: spot; intensity: 2.5; angle: 30; penumbra: 0.55; distance: 20; decay: 1; color: #e7f1ff; castShadow: false; target: #Elixir_Cylinder">
+    </a-entity>
+
+    <!-- SPONSORS WALL spotlight -->
+    <a-entity id="sponsors-spot"
+              position="8.8 3.6 -2"
+              light="type: spot; intensity: 2.8; angle: 28; penumbra: 0.2; distance: 14; decay: 1; color: #fffdf0; castShadow: false;target: #sponsors-wall">
+    </a-entity>
+
+    <!-- CRYSTALS spotlight -->
+    <a-entity id="crystals-spot"
+              position="-1.2 8.4 7.2"
+              light="type: spot; intensity: 2.2; angle: 35; penumbra: 0.55; distance: 30; decay: 1; color: #e8f3ff; castShadow: false; target: #crystals">
+    </a-entity>
+
+    <!-- MUSEUM ROOF spotlight -->
+    <a-entity id="roof-spot"
+              position="1 11 6.5"
+              light="type: spot; intensity: 1.4; angle: 45; penumbra: 0.5; distance: 30; decay: 1; color: #ffffff; castShadow: false; target: #roof">
+    </a-entity>
+
+    <!-- MUSEUM SHELL / WALLS spotlight -->
+    <a-entity id="shell-spot"
+              position="-2 8 8"
+              light="type: spot; intensity: 1.8; angle: 55; penumbra: 0.55; distance: 35; decay: 1; color: #f6f7fb; castShadow: false; target: #museum-shell">
+    </a-entity>
+
+    <!-- FLOOR spotlight (soft, wide) -->
+    <a-entity id="floor-spot"
+              position="0 5 6"
+              light="type: spot; intensity: 1.2; angle: 70; penumbra: 0.7; distance: 30; decay: 1; color: #ffffff; castShadow: false; target: #floor">
+    </a-entity>
+
+    <!-- TEXT PANELS: gentle point lights so text is readable -->
+    <a-entity id="planet-text-light" position="5 2.2 -0.2" light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
+    <a-entity id="elixir-text-light" position="8.4 2.2 -9"   light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
+    <a-entity id="statue-text-light" position="-2.1 2.5 -9"  light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
 
     <!-- Background music -->
     <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
-    <!-- Modelos -->
-    <a-entity gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
+    <!-- Modelos (now with an ID for lighting target) -->
+    <a-entity id="crystals" gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
 
     <!-- Planeta -->
     <a-entity id="planet"
@@ -473,7 +521,7 @@
     </a-entity>
 
     <!-- BIG SCREEN with the video + in-world mute/unmute button -->
-    <a-entity position="2.8 0 5" rotation="0 180 0" shadow="cast: false; receive: true">
+    <a-entity id="screen-cluster" position="2.8 0 5" rotation="0 180 0" shadow="cast: false; receive: true">
       <!-- Background frame behind the video (receives light/shadows) -->
       <a-plane id="screen-frame" position="0 3 -2.02" width="8.6" height="4.6" color="#111"
                material="metalness: 0.1; roughness: 0.9" shadow="receive: true"></a-plane>
@@ -489,7 +537,7 @@
                shadow="receive: true">
       </a-video>
 
-      <!-- In-world mute/unmute button, placed to the lower-ht of the screen -->
+      <!-- In-world mute/unmute button, placed to the lower-right of the screen -->
       <a-entity id="video-audio-button" position="3.9 0.8 -1.95" rotation="0 0 0">
         <a-plane width="1.2" height="0.45" color="#ffffff" material="transparent: true; opacity: 0.7"
                  class="clickable"
@@ -499,11 +547,14 @@
       </a-entity>
     </a-entity>
 
-    <!-- Museum shell receives shadows -->
-    <a-entity gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
+    <!-- Museum roof receives shadows (now given an ID for targeting) -->
+    <a-entity id="roof" gltf-model="#museum_roof" position="1 8 8.3" scale="0.8 0.8 0.8" animation-mixer shadow="receive: true"></a-entity>
+    
+    <!-- Museum shell / walls (ID added for targeting) -->
+    <a-entity id="museum-shell" gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
-    <!-- Museum Floor receives shadows -->
-    <a-entity gltf-model="#museum_floor_dark" position="0 6.05 9" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
+    <!-- Museum Floor (ID added for targeting) -->
+    <a-entity id="floor" gltf-model="#museum_floor_dark" position="0 6.05 9" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
     <!-- ============================== -->
     <!-- NEW: ELIXIR PLAY BUTTON + TEXT -->
@@ -518,7 +569,7 @@
              volume="1.8">
     </a-sound>
 
-    <!-- Text panel (hidden by default), slightly to the ht of the cylinder -->
+    <!-- Text panel (hidden by default), slightly to the right of the cylinder -->
     <a-entity id="elixir-text-group"
               position="8.4 2.1 -9"
               rotation="0 -15 0"
@@ -547,9 +598,8 @@
     </a-entity>
 
     <!-- ============================== -->
-    <!-- NEW: SPONSORS WALL (image panel) -->
+    <!-- SPONSORS WALL (image panel) -->
     <!-- ============================== -->
-    <!-- Placed to the ht side of the big screen wall, slightly tilted -->
     <a-entity id="sponsors-wall" position="10.1 2 -2" rotation="0 -90 0" shadow="receive: true">
       <!-- Frame behind the logos -->
       <a-plane width="3.2" height="2.0" color="#0d0f12"
@@ -561,11 +611,10 @@
                width="3.0" height="1.8"
                material="shader: standard; metalness: 0.0; roughness: 0.95"
                shadow="receive: true"></a-image>
-      <!-- Soft area light feel via emissive overlay (optional, subtle glow) -->
+      <!-- Soft area light feel via emissive overlay -->
       <a-plane width="3.0" height="1.8" position="0 0 0.01"
                material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
     </a-entity>
-    <!-- ============================== -->
 
     <!-- Cámara (WASD + look on the SAME entity) -->
     <a-entity id="" position="7.5 2 -2" rotation="0 -90 0">
@@ -677,5 +726,7 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
+
+
 
 
