@@ -5,42 +5,86 @@
   <meta charset="utf-8" />
   <title>Purple Bacteria Museum</title>
 
-  <!-- IMPORTANT for mobile -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, minimum-scale=1, maximum-scale=1" />
+  <!-- Mobile-friendly viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 
   <!-- A-Frame + extras -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.0/dist/aframe-extras.min.js"></script>
 
-  <!-- iOS 13+ motion permission prompt -->
-  <script src="https://unpkg.com/aframe-device-orientation-permission-ui/dist/aframe-device-orientation-permission-ui.min.js"></script>
-
-  <!-- Virtual joystick for mobile walking (maps to WASD) -->
-  <script src="https://cdn.rawgit.com/mrturck/aframe-joystick/master/joystick.min.js"></script>
-
   <link rel="stylesheet" href="./style.css">
 
   <style>
-    /* Lock the page so touches belong to the scene */
+    /* Keep touches inside the scene */
     html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
       background: #000;
-      /* Prevent browser’s default touch handling (scroll/zoom) */
       touch-action: none;
       overscroll-behavior: none;
       -webkit-user-select: none;
       user-select: none;
     }
-    /* Optional: improve tap responsiveness */
     * { -webkit-tap-highlight-color: transparent; }
+
+    /* Forward button (only shown on mobile via JS) */
+    #forwardBtn {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      padding: 14px 20px;
+      font: 600 16px/1.1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #111;
+      background: rgba(255,255,255,.9);
+      border: 0;
+      border-radius: 999px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.25);
+      opacity: 0;               /* hidden by default; JS toggles to 1 on mobile */
+      pointer-events: none;      /* disabled until shown */
+      transition: opacity .2s ease;
+      z-index: 10;
+    }
+    #forwardBtn:active { background: rgba(255,255,255,1); }
   </style>
 
   <!-- ********************************* -->
   <!--        Scripts Head      -->        
   <!-- ********************************* -->
   <script>
+  /* ---------- MOBILE FORWARD LOCOMOTION COMPONENT ---------- */
+  // Attach this to the *rig* (parent of camera). Hold the button to move forward.
+  AFRAME.registerComponent('manual-forward-move', {
+    schema: { speed: {default: 1.6} }, // meters per second
+    init() {
+      this.moving = false;
+      this.dir = new THREE.Vector3();
+      this.camera = (this.el.sceneEl && this.el.sceneEl.cameraEl) || document.querySelector('#camera');
+      // Fallback if cameraEl not yet set
+      if (!this.camera) {
+        this.el.sceneEl.addEventListener('loaded', () => {
+          this.camera = this.el.sceneEl.cameraEl || document.querySelector('#camera');
+        });
+      }
+    },
+    start(){ this.moving = true; },
+    stop(){ this.moving = false; },
+    tick(time, delta) {
+      if (!this.moving || !this.camera) return;
+      const dt = Math.min(delta, 50) / 1000; // clamp big frames
+      // Get the camera forward in world space
+      this.camera.object3D.getWorldDirection(this.dir);
+      this.dir.y = 0; // stay level
+      if (this.dir.lengthSq() === 0) return;
+      this.dir.normalize();
+      const d = this.data.speed * dt;
+      // Move the rig (this.el is the rig)
+      this.el.object3D.position.addScaledVector(this.dir, d);
+    }
+  });
+
+  /* ---------- YOUR EXISTING COMPONENTS (unchanged) ---------- */
   AFRAME.registerComponent('show-on-near', {
     schema: {
       target:   { type: 'selector' },
@@ -128,7 +172,6 @@
     }
   });
 
-  // In-world video audio toggle component (unchanged behavior)
   AFRAME.registerComponent('video-audio-toggle', {
     schema: { video: { type: 'selector' }, label: { type: 'selector' } },
     init() {
@@ -167,12 +210,11 @@
     }
   });
 
-  // Toggle panel + play/pause voiceover; with ironclad first-click unlock
   AFRAME.registerComponent('toggle-entity-visibility', {
     schema: {
-      target:   { type: 'selector' },          // entity to show/hide
-      label:    { type: 'selector' },          // label entity to update
-      sound:    { type: 'selector', default: null }, // <a-sound> to control
+      target:   { type: 'selector' },
+      label:    { type: 'selector' },
+      sound:    { type: 'selector', default: null },
       playText: { default: 'Play' },
       pauseText:{ default: 'Pause' }
     },
@@ -183,7 +225,7 @@
       this.el.addEventListener('click', this._onClick);
       this.el.addEventListener('mouseenter', this._onEnter);
       this.el.addEventListener('mouseleave', this._onLeave);
-      this.updateLabel(); // start as "Play"
+      this.updateLabel();
     },
     unlockAudioIfNeeded() {
       try {
@@ -196,25 +238,16 @@
       const t = this.data.target;
       const soundCmp = this.data.sound && this.data.sound.components ? this.data.sound.components.sound : null;
       if (!t) return;
-
-      // Ensure audio context is running (first click on iOS/Chrome)
       this.unlockAudioIfNeeded();
-
       const visibleNow = !!t.getAttribute('visible');
-
       if (visibleNow) {
-        // Hide + pause
         t.setAttribute('visible', false);
         if (soundCmp) { try { soundCmp.pauseSound(); } catch(e) {} }
       } else {
-        // Show + play/resume (non-looping)
         t.setAttribute('visible', true);
         if (soundCmp) {
           try {
-            if (!soundCmp.isPlaying) {
-              soundCmp.stopSound();
-              soundCmp.playSound();
-            }
+            if (!soundCmp.isPlaying) { soundCmp.stopSound(); soundCmp.playSound(); }
           } catch(e) {}
         }
       }
@@ -238,9 +271,6 @@
     }
   });
 
-  /* ============================================
-     NEW: "Lava lamp" color drift for GLTF meshes
-  ============================================ */
   AFRAME.registerComponent('lava-lamp-color', {
     schema: {
       hueMin:   {default: 0.62},
@@ -257,11 +287,9 @@
       this._materials = [];
       this.captureMaterials = this.captureMaterials.bind(this);
       this.applyColor = this.applyColor.bind(this);
-
       this.el.addEventListener('model-loaded', this.captureMaterials);
       this.el.addEventListener('object3dset', this.captureMaterials);
       this.captureMaterials();
-
       const c = new THREE.Color();
       c.setHSL(this.data.hueMin, this.data.sat, this.data.light);
       this.applyColor(c, 1.0);
@@ -319,14 +347,15 @@
 </head>
   
 <body>
+  <!-- The on-screen forward button (JS will show it only on mobile) -->
+  <button id="forwardBtn" aria-label="Hold to move forward">Hold to move</button>
+
   <a-scene
     renderer="colorManagement: true; physicallyCorrectLights: true; toneMapping: ACESFilmic; exposure: 0.85; shadowMap: true;"
     background="color: #9aa7b3"
     fog="type: exponential; color: #7a8793; density: 0.14"
-    device-orientation-permission-ui     <!-- iOS prompt so look works -->
-    joystick                              <!-- virtual joystick for mobile walking -->
     vr-mode-ui="enabled: true"
-    >
+  >
     <a-assets timeout="15000">
       <a-asset-item id="mdl-cristales" src="./asset/cristales_bacterias_2.glb"></a-asset-item>
       <a-asset-item id="planeta_museo_exterior" src="./asset/planeta_museo_central.glb"></a-asset-item>
@@ -351,21 +380,19 @@
       <audio id="museum-voiceover-1" src="./asset/museum_voiceover_1.mpeg" preload="auto" crossOrigin="anonymous"></audio>
       <audio id="museum-voiceover-2" src="./asset/museum_voiceover_2.mpeg" preload="auto" crossOrigin="anonymous"></audio>
 
-      <!-- NEW: SPONSORS IMAGE -->
+      <!-- SPONSORS IMAGE -->
       <img id="sponsors" src="./asset/sponsors_logos.jpeg" crossOrigin="anonymous">
     </a-assets>
 
-    <!-- Global lights — darker mood -->
+    <!-- Global lights -->
     <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
     <a-entity light="type: hemisphere; intensity: 0.12; color: #dfe7ef; groundColor: #39454f"></a-entity>
 
-    <!-- ============================================== -->
     <!-- SPOTLIGHTS -->
-    <!-- ============================================== -->
-    <a-entity id="screen-spot"  position="2 4 2"  light="type: spot; intensity: 3; angle: 30; penumbra: 0.6; distance: 24; decay: 1; color: #ffffff; castShadow: false; target: #video-screen"></a-entity>
-    <a-entity id="planet-spot"  position="3 4 0.8" light="type: spot; intensity: 2.8; angle: 35; penumbra: 0.6; distance: 18; decay: 1; color: #fff3e6; castShadow: false; target: #planet"></a-entity>
-    <a-entity id="statue-spot"  position="-2.2 4.2 -8.4" light="type: spot; intensity: 2.6; angle: 32; penumbra: 0.55; distance: 20; decay: 1; color: #eae8ff; castShadow: false; target: #animation_statue"></a-entity>
-    <a-entity id="elixir-spot"  position="6.3 8 -8.4"  light="type: spot; intensity: 6; angle: 90; penumbra: 0.55; distance: 50; decay: 1; color: #e7f1ff; castShadow: false; target: #Elixir_Cylinder"></a-entity>
+    <a-entity id="screen-spot" position="2 4 2" light="type: spot; intensity: 3; angle: 30; penumbra: 0.6; distance: 24; decay: 1; color: #ffffff; castShadow: false; target: #video-screen"></a-entity>
+    <a-entity id="planet-spot" position="3 4 0.8" light="type: spot; intensity: 2.8; angle: 35; penumbra: 0.6; distance: 18; decay: 1; color: #fff3e6; castShadow: false; target: #planet"></a-entity>
+    <a-entity id="statue-spot" position="-2.2 4.2 -8.4" light="type: spot; intensity: 2.6; angle: 32; penumbra: 0.55; distance: 20; decay: 1; color: #eae8ff; castShadow: false; target: #animation_statue"></a-entity>
+    <a-entity id="elixir-spot" position="6.3 8 -8.4" light="type: spot; intensity: 6; angle: 90; penumbra: 0.55; distance: 50; decay: 1; color: #e7f1ff; castShadow: false; target: #Elixir_Cylinder"></a-entity>
     <a-entity id="sponsors-spot" position="8.8 4.6 -2" light="type: spot; intensity: 2.8; angle: 28; penumbra: 0.2; distance: 14; decay: 1; color: #fffdf0; castShadow: false;target: #sponsors-wall"></a-entity>
     <a-entity id="crystals-spot" position="0 8 -9.5" light="type: spot; intensity: 10; angle: 90; penumbra: 0.55; distance: 30; decay: 1; color: #e8f3ff; castShadow: false;"></a-entity>
     <a-entity id="roof-spot" position="1 9 9.5" light="type: spot; intensity: 4.4; angle: 180; penumbra: 0.5; distance: 30; decay: 1; color: #ffffff; castShadow: false; target: #roof"></a-entity>
@@ -374,8 +401,8 @@
 
     <!-- TEXT LIGHTS -->
     <a-entity id="planet-text-light" position="5 2.2 -0.2" light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
-    <a-entity id="elixir-text-light" position="8.4 2.2 -9"   light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
-    <a-entity id="statue-text-light" position="-2.1 2.5 -9"  light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
+    <a-entity id="elixir-text-light" position="8.4 2.2 -9" light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
+    <a-entity id="statue-text-light" position="-2.1 2.5 -9" light="type: point; intensity: 0.6; distance: 6; decay: 2; color: #ffffff"></a-entity>
 
     <!-- Background music -->
     <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
@@ -525,8 +552,8 @@
     </a-entity>
 
     <!-- CAMERA RIG -->
-    <a-entity id="rig" position="7.5 2 -2" rotation="0 -90 0">
-      <!-- Look with drag/gyro; move via WASD (desktop) and virtual joystick (mobile) -->
+    <a-entity id="rig" position="7.5 2 -2" rotation="0 -90 0" manual-forward-move="speed: 1.6">
+      <!-- Desktop: WASD + mouse; Mobile: look-controls + forward button -->
       <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
     </a-entity>
   </a-scene>
@@ -535,6 +562,31 @@
   <!--        Scripts Footer      -->        
   <!-- ********************************* -->
   <script>
+  // Show the Forward button only on phones/tablets
+  (function setupForwardButton(){
+    const btn = document.getElementById('forwardBtn');
+    const isMobile = AFRAME.utils.device.isMobile();
+    if (!isMobile) return; // keep it hidden on desktop
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+
+    const rig = document.getElementById('rig');
+    const cmp = rig.components['manual-forward-move'];
+
+    // Use pointer events to support touch and mouse
+    const start = (e) => { e.preventDefault(); cmp && cmp.start(); };
+    const stop  = (e) => { e.preventDefault(); cmp && cmp.stop(); };
+
+    btn.addEventListener('pointerdown', start);
+    btn.addEventListener('pointerup', stop);
+    btn.addEventListener('pointercancel', stop);
+    btn.addEventListener('pointerleave', stop);
+
+    // Safety stop if finger slides off button then lifts
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('blur', stop);
+  })();
+
   // Background music (start on first user interaction once)
   function playSound() {
     const sound = document.querySelector("#bg-sound");
@@ -544,33 +596,27 @@
   }
   document.addEventListener("click", playSound, { once: true });
 
-  // One-time audio unlock + voiceover prime (so first click on Play works)
+  // Audio unlock + prime
   function unlockAndPrimeVoice() {
     const scene = document.querySelector('a-scene');
     try {
       const ctx = scene && scene.audioListener && scene.audioListener.context;
       if (ctx && ctx.state !== 'running') ctx.resume();
     } catch(e) {}
-    // Prime planet voice
-    const voice = document.querySelector('#planet-voice');
-    if (voice && voice.components && voice.components.sound) {
-      try { voice.components.sound.stopSound(); voice.components.sound.playSound(); voice.components.sound.pauseSound(); } catch(e) {}
-    }
-    // Prime elixir voice
-    const elixirVoice = document.querySelector('#elixir-voice');
-    if (elixirVoice && elixirVoice.components && elixirVoice.components.sound) {
-      try { elixirVoice.components.sound.stopSound(); elixirVoice.components.sound.playSound(); elixirVoice.components.sound.pauseSound(); } catch(e) {}
-    }
-    // Prime statue voice
-    const statueVoice = document.querySelector('#statue-voice');
-    if (statueVoice && statueVoice.components && statueVoice.components.sound) {
-      try { statueVoice.components.sound.stopSound(); statueVoice.components.sound.playSound(); statueVoice.components.sound.pauseSound(); } catch(e) {}
-    }
+    const tryPrime = (sel) => {
+      const s = document.querySelector(sel);
+      if (s && s.components && s.components.sound) {
+        try { s.components.sound.stopSound(); s.components.sound.playSound(); s.components.sound.pauseSound(); } catch(e) {}
+      }
+    };
+    tryPrime('#planet-voice');
+    tryPrime('#elixir-voice');
+    tryPrime('#statue-voice');
   }
   document.addEventListener('click', unlockAndPrimeVoice, { once: true, passive: true });
   document.addEventListener('touchend', unlockAndPrimeVoice, { once: true, passive: true });
 
-  // Ensure the video starts (muted autoplay should work; also retry on user gesture)
+  // Ensure the video starts
   const vid = document.getElementById('museum-video');
   function tryPlayVideo() {
     if (!vid) return;
