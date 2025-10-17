@@ -616,10 +616,17 @@
                material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
     </a-entity>
 
-    <!-- Cámara (WASD + look on the SAME entity) -->
-    <a-entity id="" position="7.5 2 -2" rotation="0 -90 0">
-      <a-entity id="camera" camera look-controls wasd-controls="acceleration: 50; fly: false" cursor="rayOrigin: mouse"></a-entity>
-    </a-entity>
+<!-- Movement rig (works on desktop + phones with touch) -->
+<a-entity id="rig"
+          position="7.5 2 -2"
+          rotation="0 -90 0"
+          movement-controls="controls: touch, keyboard; speed: 0.2">
+  <a-entity id="camera"
+            camera
+            look-controls
+            cursor="rayOrigin: mouse">
+  </a-entity>
+</a-entity>
   </a-scene>
 
   <!-- ********************************* -->
@@ -726,6 +733,7 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
+
 
 
 
