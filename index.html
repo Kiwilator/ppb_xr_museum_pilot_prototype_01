@@ -16,6 +16,55 @@
   <!-- ********************************* -->
   
   <script>
+AFRAME.registerComponent('touch-walk-forward', {
+  schema: { camera: { type: 'selector' }, speed: { default: 1.6 } }, // meters/sec
+  init() {
+    this._dir = new THREE.Vector3();
+    this._moving = false;
+
+    this._onDown = (e) => {
+      // Only start if the touch/click is on the WebGL canvas (not on UI overlays)
+      const path = (e.composedPath && e.composedPath()) || [];
+      const onCanvas = path.some(n => n && n.tagName === 'CANVAS');
+      if (!onCanvas) return;
+      this._moving = true;
+    };
+    this._onUp = () => { this._moving = false; };
+
+    const hook = () => {
+      const canvas = this.el.sceneEl && this.el.sceneEl.canvas;
+      if (!canvas) return;
+      canvas.addEventListener('touchstart', this._onDown, { passive: true });
+      canvas.addEventListener('touchend',   this._onUp,   { passive: true });
+      canvas.addEventListener('touchcancel',this._onUp,   { passive: true });
+      canvas.addEventListener('mousedown',  this._onDown);
+      canvas.addEventListener('mouseup',    this._onUp);
+    };
+    if (this.el.sceneEl.hasLoaded) hook();
+    else this.el.sceneEl.addEventListener('loaded', hook);
+  },
+  tick(time, deltaMs) {
+    if (!this._moving || !this.data.camera) return;
+    const cam = this.data.camera.object3D;
+    const rig = this.el.object3D;
+
+    cam.getWorldDirection(this._dir);
+    this._dir.y = 0;            // stay on the ground plane
+    this._dir.normalize();
+
+    const step = (this.data.speed) * (deltaMs / 1000);
+    rig.position.addScaledVector(this._dir, step);
+  },
+  remove() {
+    const canvas = this.el.sceneEl && this.el.sceneEl.canvas;
+    if (!canvas) return;
+    canvas.removeEventListener('touchstart', this._onDown);
+    canvas.removeEventListener('touchend',   this._onUp);
+    canvas.removeEventListener('touchcancel',this._onUp);
+    canvas.removeEventListener('mousedown',  this._onDown);
+    canvas.removeEventListener('mouseup',    this._onUp);
+  }
+});
   AFRAME.registerComponent('show-on-near', {
     schema: {
       target:   { type: 'selector' },
@@ -616,11 +665,11 @@
                material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
     </a-entity>
 
-<!-- Movement rig (works on desktop + phones with touch) -->
+<!-- Player rig -->
 <a-entity id="rig"
           position="7.5 2 -2"
           rotation="0 -90 0"
-          movement-controls="controls: touch, keyboard; speed: 0.2">
+          touch-walk-forward="camera: #camera; speed: 1.6">
   <a-entity id="camera"
             camera
             look-controls
@@ -733,6 +782,7 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
+
 
 
 
