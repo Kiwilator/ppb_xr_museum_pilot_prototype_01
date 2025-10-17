@@ -2,7 +2,7 @@
 <html lang="en">
 
   <!-- A VR Purple Bacteria Museum Pilot Prototype by Sonia Rodriguez - Jose L. Rubio - D.Puyol - URJC-->
-  
+
 <head>
   <meta charset="utf-8" />
   <title>Purple Bacteria Museum</title>
@@ -11,59 +11,17 @@
   <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.0/dist/aframe-extras.min.js"></script>
   <link rel="stylesheet" href="./style.css">
 
+  <!-- CSS mínimo para móvil -->
+  <style>
+    html, body { margin:0; height:100%; overscroll-behavior: none; }
+    a-scene, canvas.a-canvas { touch-action: none; }
+  </style>
+
   <!-- ********************************* -->
   <!--        Scripts Head      -->        
   <!-- ********************************* -->
   
   <script>
-AFRAME.registerComponent('press-to-walk', {
-  schema: { speed: {default: 1.6} }, // m/s
-  init() {
-    this.moving = false;
-    this.dir = new THREE.Vector3();
-    this.rig = document.getElementById('rig');
-    this.cam = document.getElementById('camera');
-
-    const onDown = (e) => {
-      // Solo si el toque es sobre el canvas WebGL
-      const path = (e.composedPath && e.composedPath()) || [];
-      const onCanvas = path.some(n => n && n.tagName === 'CANVAS' && n.classList.contains('a-canvas'));
-      if (!onCanvas) return;
-      this.moving = true;
-    };
-    const onUp = () => { this.moving = false; };
-
-    const hook = () => {
-      const canvas = this.el.sceneEl && this.el.sceneEl.canvas;
-      if (!canvas) return;
-      canvas.addEventListener('touchstart', onDown, {passive: true});
-      canvas.addEventListener('touchend',   onUp,   {passive: true});
-      canvas.addEventListener('touchcancel',onUp,   {passive: true});
-      canvas.addEventListener('mousedown',  onDown);
-      canvas.addEventListener('mouseup',    onUp);
-      this._detach = () => {
-        canvas.removeEventListener('touchstart', onDown);
-        canvas.removeEventListener('touchend',   onUp);
-        canvas.removeEventListener('touchcancel',onUp);
-        canvas.removeEventListener('mousedown',  onDown);
-        canvas.removeEventListener('mouseup',    onUp);
-      };
-    };
-
-    if (this.el.sceneEl.hasLoaded) hook();
-    else this.el.sceneEl.addEventListener('loaded', hook);
-  },
-  tick(t, dt) {
-    if (!this.moving || !this.rig || !this.cam) return;
-    // Dirección hacia donde mira la cámara (plana en XZ)
-    this.cam.object3D.getWorldDirection(this.dir);
-    this.dir.y = 0; this.dir.normalize();
-
-    const step = (this.data.speed) * (dt / 1000);
-    this.rig.object3D.position.addScaledVector(this.dir, step);
-  },
-  remove() { if (this._detach) this._detach(); }
-});
   AFRAME.registerComponent('show-on-near', {
     schema: {
       target:   { type: 'selector' },
@@ -263,25 +221,17 @@ AFRAME.registerComponent('press-to-walk', {
 
   /* ============================================
      NEW: "Lava lamp" color drift for GLTF meshes
-     - Smoothly cycles hue within a range (blue→purple)
-     - Gentle variation in saturation and lightness
-     - Works on textured materials (multiplies base color)
   ============================================ */
   AFRAME.registerComponent('lava-lamp-color', {
     schema: {
-      // Hue range [0..1] (HSL). Defaults ≈ blue (0.62) → purple (0.78).
       hueMin:   {default: 0.62},
       hueMax:   {default: 0.78},
-      // Base saturation/lightness and breathing amplitudes.
       sat:      {default: 0.85},
       light:    {default: 0.55},
       satAmp:   {default: 0.10},
       lightAmp: {default: 0.08},
-      // Overall animation speed (cycles per second-ish).
       speed:    {default: 0.08},
-      // Emissive strength so it “reads” under dim light.
       emissive: {default: 0.35},
-      // Optional opacity breathing (0 disables).
       opacityBreath: {default: 0.0}
     },
     init() {
@@ -293,7 +243,6 @@ AFRAME.registerComponent('press-to-walk', {
       this.el.addEventListener('object3dset', this.captureMaterials);
       this.captureMaterials();
 
-      // Prime initial color.
       const c = new THREE.Color();
       c.setHSL(this.data.hueMin, this.data.sat, this.data.light);
       this.applyColor(c, 1.0);
@@ -306,7 +255,7 @@ AFRAME.registerComponent('press-to-walk', {
         if (n.isMesh && n.material) {
           const mats = Array.isArray(n.material) ? n.material : [n.material];
           mats.forEach(m => {
-            m.transparent = true; // allow subtle opacity breathing
+            m.transparent = true;
             m.needsUpdate = true;
             this._materials.push(m);
           });
@@ -314,38 +263,28 @@ AFRAME.registerComponent('press-to-walk', {
       });
     },
     _smooth(u){ return u*u*(3 - 2*u); },
-
     tick(timeMs) {
       if (!this._materials.length) return;
-
       const t = (timeMs || 0) / 1000;
       const d = this.data;
-
       const w  = d.speed * Math.PI * 2;
       const s1 = (Math.sin(w * t) + 1) * 0.5;
       const s2 = (Math.sin(w * 0.63 * t + 1.7) + 1) * 0.5;
       const s3 = (Math.sin(w * 0.41 * t - 0.9) + 1) * 0.5;
-
       let uHue = this._smooth( (s1*0.60 + s2*0.25 + s3*0.15) );
       const hue = THREE.MathUtils.lerp(d.hueMin, d.hueMax, uHue);
-
       const sat   = THREE.MathUtils.clamp(d.sat + d.satAmp   * (s2 - 0.5) * 2, 0, 1);
       const light = THREE.MathUtils.clamp(d.light + d.lightAmp* (s3 - 0.5) * 2, 0, 1);
-
       const op = d.opacityBreath > 0 ? THREE.MathUtils.clamp(1.0 - d.opacityBreath*0.5 + d.opacityBreath*0.5*Math.sin(w*0.33*t), 0.5, 1) : 1.0;
-
       const color = new THREE.Color();
       color.setHSL(hue, sat, light);
-
       this.applyColor(color, op);
     },
     applyColor(color, opacity) {
       const emissiveStrength = this.data.emissive;
       this._materials.forEach(m => {
         if (m.color) m.color.copy(color);
-        if (m.emissive) {
-          m.emissive.copy(color).multiplyScalar(emissiveStrength);
-        }
+        if (m.emissive) m.emissive.copy(color).multiplyScalar(emissiveStrength);
         if (typeof opacity === 'number') m.opacity = opacity;
         m.needsUpdate = true;
       });
@@ -353,6 +292,61 @@ AFRAME.registerComponent('press-to-walk', {
     remove() {
       this.el.removeEventListener('model-loaded', this.captureMaterials);
       this.el.removeEventListener('object3dset', this.captureMaterials);
+    }
+  });
+
+  /* ========= COPIADO DEL PROYECTO QUE FUNCIONA =========
+     rig-collider (opcional, por si marcas paredes con class="wall")
+  ======================================================= */
+  AFRAME.registerComponent('rig-collider', {
+    schema: {
+      wallSelector: { type: 'string', default: '.wall' },
+      radius: { type: 'number', default: 0.35 },
+      debug: { type: 'boolean', default: false }
+    },
+    init: function () {
+      this.walls = Array.from(document.querySelectorAll(this.data.wallSelector));
+      this.playerSphere = new THREE.Sphere(new THREE.Vector3(), this.data.radius);
+      this.tempBox = new THREE.Box3();
+      this.prevLocal = new THREE.Vector3().copy(this.el.object3D.position);
+      this.prevWorld = new THREE.Vector3();
+      this.el.object3D.getWorldPosition(this.prevWorld);
+      if (this.data.debug) {
+        this.debugEl = document.createElement('a-sphere');
+        this.debugEl.setAttribute('radius', this.data.radius);
+        this.debugEl.setAttribute('opacity', 0.35);
+        this.debugEl.setAttribute('visible', true);
+        this.debugEl.setAttribute('material', 'shader: flat');
+        this.el.appendChild(this.debugEl);
+      }
+    },
+    tick: function () {
+      const localPos = this.el.object3D.position;
+      const worldPos = new THREE.Vector3();
+      this.el.object3D.getWorldPosition(worldPos);
+      this.playerSphere.center.copy(worldPos);
+      if (this.debugEl) {
+        const localCenter = this.el.object3D.worldToLocal(this.playerSphere.center.clone());
+        this.debugEl.object3D.position.copy(localCenter);
+      }
+      for (let wall of this.walls) {
+        if (!wall.object3D) continue;
+        try { this.tempBox.setFromObject(wall.object3D); } catch (e) { continue; }
+        if (this.tempBox.intersectsSphere(this.playerSphere)) {
+          this.el.setAttribute('position', {
+            x: this.prevLocal.x,
+            y: this.prevLocal.y,
+            z: this.prevLocal.z
+          });
+          const mc = this.el.components['movement-controls'];
+          if (mc && mc.velocity && typeof mc.velocity.set === 'function') {
+            mc.velocity.set(0, 0, 0);
+          }
+          return;
+        }
+      }
+      this.prevLocal.copy(localPos);
+      this.el.object3D.getWorldPosition(this.prevWorld);
     }
   });
   </script>
@@ -379,7 +373,7 @@ AFRAME.registerComponent('press-to-walk', {
              loop
              muted
              playsinline
-             crossoin="anonymous"
+             crossOrigin="anonymous"
              preload="auto">
       </video>
 
@@ -389,7 +383,7 @@ AFRAME.registerComponent('press-to-walk', {
       <audio id="museum-voiceover-2" src="./asset/museum_voiceover_2.mpeg" preload="auto"></audio>
 
       <!-- NEW: SPONSORS IMAGE -->
-      <img id="sponsors" src="./asset/sponsors_logos.jpeg" crossoin="anonymous">
+      <img id="sponsors" src="./asset/sponsors_logos.jpeg" crossOrigin="anonymous">
     </a-assets>
 
     <!-- Global lights — darker mood -->
@@ -462,7 +456,7 @@ AFRAME.registerComponent('press-to-walk', {
     <!-- Background music -->
     <a-sound id="bg-sound" src="./asset/music.mp3" autoplay="false" loop="true" volume="0.22" position="0 1.6 0"></a-sound>
 
-    <!-- Modelos (now with an ID for lighting target) -->
+    <!-- Modelos -->
     <a-entity id="crystals" gltf-model="#mdl-cristales" position="0 6 10" scale="1 1 1" animation-mixer shadow="cast: true; receive: true"></a-entity>
 
     <!-- Planeta -->
@@ -476,7 +470,7 @@ AFRAME.registerComponent('press-to-walk', {
               animation__float="property: position; dir: alternate; dur: 4000; easing: easeInOutSine; loop: true; to: 3 2.05 0">
     </a-entity>
 
-    <!-- Estatua Animación (now with lava-lamp color drift) -->
+    <!-- Estatua Animación -->
     <a-entity id="animation_statue"
               gltf-model="#animacion_bacteria_color"
               position="0 2.6 -10.5"
@@ -595,13 +589,13 @@ AFRAME.registerComponent('press-to-walk', {
       </a-entity>
     </a-entity>
 
-    <!-- Museum roof receives shadows (now given an ID for targeting) -->
+    <!-- Museum roof receives shadows -->
     <a-entity id="roof" gltf-model="#museum_roof" position="1 8 8.3" scale="0.8 0.8 0.8" animation-mixer shadow="receive: true"></a-entity>
     
-    <!-- Museum shell / walls (ID added for targeting) -->
+    <!-- Museum shell / walls -->
     <a-entity id="museum-shell" gltf-model="#mdl-techo_paredes_2" position="0 6 10" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
-    <!-- Museum Floor (ID added for targeting) -->
+    <!-- Museum Floor -->
     <a-entity id="floor" gltf-model="#museum_floor_dark" position="0 6.05 9" scale="1 1 1" animation-mixer shadow="receive: true"></a-entity>
 
     <!-- ============================== -->
@@ -664,14 +658,31 @@ AFRAME.registerComponent('press-to-walk', {
                material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
     </a-entity>
 
-<!--  rig (necesario para mover en móvil) -->
-<a-entity id="rig" position="7.5 1.6 -2" rotation="0 -90 0">
-  <a-entity id="camera"
-            camera
-            look-controls
-            cursor="rayOrigin: mouse">
-  </a-entity>
-</a-entity>
+    <!-- ========= MOVIMIENTO COMO EN EL PROYECTO QUE FUNCIONA ========= -->
+    <!-- RIG del jugador con movement-controls (tacto móvil + teclado en desktop) -->
+    <a-entity id="rig"
+              position="7.5 0 -2"
+              rotation="0 -90 0"
+              movement-controls="fly: false"
+              rig-collider="wallSelector: .wall; radius: 0.35; debug: false">
+      <a-entity id="camera"
+                camera
+                position="0 1.6 0"
+                look-controls="pointerLockEnabled: false"
+                cursor="rayOrigin: mouse">
+        <!-- Punto de mira opcional (útil para VR/Cardboard) -->
+        <!--
+        <a-entity
+          cursor="fuse: true; fuseTimeout: 500"
+          position="0 0 -1"
+          geometry="primitive: ring; radiusInner: 0.003; radiusOuter: 0.006"
+          material="color: white; shader: flat">
+        </a-entity>
+        -->
+      </a-entity>
+    </a-entity>
+    <!-- =============================================================== -->
+
   </a-scene>
 
   <!-- ********************************* -->
@@ -713,7 +724,7 @@ AFRAME.registerComponent('press-to-walk', {
         elixirVoice.components.sound.pauseSound();
       } catch(e) {}
     }
-    // Prime statue voice (NEW)
+    // Prime statue voice
     const statueVoice = document.querySelector('#statue-voice');
     if (statueVoice && statueVoice.components && statueVoice.components.sound) {
       try {
@@ -740,7 +751,7 @@ AFRAME.registerComponent('press-to-walk', {
     document.addEventListener('touchend', resume, { passive: true });
   }
 
-  // Planet text (existing)
+  // Planet text
   const txt = `Over three billion years ago, Earth was a very different place: young oceans, almost no oxygen, and layers of water where light filtered gently down. In that setting, life began to use sunlight in simple ways.
 
 Among those early light-users were the purple bacteria. They carry out photosynthesis without releasing oxygen. Instead of splitting water, they use substances like hydrogen sulphide or organic compounds. That’s why they thrive where there is light but little oxygen—in microbial mats and stratified waters. They offer a glimpse of what photosynthesis may have looked like before the version that oxygenated the planet.
@@ -752,7 +763,7 @@ Much later came the cyanobacteria with the “modern” form of photosynthesis t
     textEl.setAttribute('text', Object.assign({}, current, { value: txt }));
   }
 
-  // Elixir text (NEW)
+  // Elixir text
   const elixirTxt = `Some purple bacteria, specifically the non-sulphur types, are able to produce hydrogen when exposed to light. The process is called photofermentation: instead of needing high temperatures or pressures, these bacteria operate at room temperature and without oxygen, using light energy as the main “engine” and consuming simple organic compounds (for example, organic acids). For this reason, it is considered a pathway with low external energy input compared with industrial methods such as electrolysis, where electricity is the major cost.
 
 In practice, they are grown in photobioreactors: illuminated vessels where light and organic matter “go in” and hydrogen gas “comes out”. Groups such as Rhodobacter and Rhodopseudomonas are the most studied. The advantage is twofold: besides producing H₂, these bacteria can use carbon-rich waste streams (wastewater or agri-food by-products), turning “leftovers” into an energy resource. It is an active line of research within the circular economy and wastewater treatment, precisely because light provides much of the energy the system needs.`;
@@ -762,7 +773,7 @@ In practice, they are grown in photobioreactors: illuminated vessels where light
     elixirTextEl.setAttribute('text', Object.assign({}, current, { value: elixirTxt }));
   }
 
-  // Statue text (NEW)
+  // Statue text
   const statueTxt = `Why purple bacteria change colour
 
 The colour of these bacteria depends on their pigment mix. They contain bacteriochlorophylls, which harvest light and push the tone towards purples/magenta, and carotenoids, which act as photoprotection and add oranges and reds. It isn’t a fixed dye: the cell adjusts how much of each pigment it makes according to its environment—like moving sliders on an equaliser. How those pigments are packed into the light-harvesting complexes also shapes what we see.
@@ -778,15 +789,3 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
