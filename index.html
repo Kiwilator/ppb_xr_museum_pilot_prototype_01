@@ -16,54 +16,53 @@
   <!-- ********************************* -->
   
   <script>
-AFRAME.registerComponent('touch-walk-forward', {
-  schema: { camera: { type: 'selector' }, speed: { default: 1.6 } }, // meters/sec
+AFRAME.registerComponent('press-to-walk', {
+  schema: { speed: {default: 1.6} }, // m/s
   init() {
-    this._dir = new THREE.Vector3();
-    this._moving = false;
+    this.moving = false;
+    this.dir = new THREE.Vector3();
+    this.rig = document.getElementById('rig');
+    this.cam = document.getElementById('camera');
 
-    this._onDown = (e) => {
-      // Only start if the touch/click is on the WebGL canvas (not on UI overlays)
+    const onDown = (e) => {
+      // Solo si el toque es sobre el canvas WebGL
       const path = (e.composedPath && e.composedPath()) || [];
-      const onCanvas = path.some(n => n && n.tagName === 'CANVAS');
+      const onCanvas = path.some(n => n && n.tagName === 'CANVAS' && n.classList.contains('a-canvas'));
       if (!onCanvas) return;
-      this._moving = true;
+      this.moving = true;
     };
-    this._onUp = () => { this._moving = false; };
+    const onUp = () => { this.moving = false; };
 
     const hook = () => {
       const canvas = this.el.sceneEl && this.el.sceneEl.canvas;
       if (!canvas) return;
-      canvas.addEventListener('touchstart', this._onDown, { passive: true });
-      canvas.addEventListener('touchend',   this._onUp,   { passive: true });
-      canvas.addEventListener('touchcancel',this._onUp,   { passive: true });
-      canvas.addEventListener('mousedown',  this._onDown);
-      canvas.addEventListener('mouseup',    this._onUp);
+      canvas.addEventListener('touchstart', onDown, {passive: true});
+      canvas.addEventListener('touchend',   onUp,   {passive: true});
+      canvas.addEventListener('touchcancel',onUp,   {passive: true});
+      canvas.addEventListener('mousedown',  onDown);
+      canvas.addEventListener('mouseup',    onUp);
+      this._detach = () => {
+        canvas.removeEventListener('touchstart', onDown);
+        canvas.removeEventListener('touchend',   onUp);
+        canvas.removeEventListener('touchcancel',onUp);
+        canvas.removeEventListener('mousedown',  onDown);
+        canvas.removeEventListener('mouseup',    onUp);
+      };
     };
+
     if (this.el.sceneEl.hasLoaded) hook();
     else this.el.sceneEl.addEventListener('loaded', hook);
   },
-  tick(time, deltaMs) {
-    if (!this._moving || !this.data.camera) return;
-    const cam = this.data.camera.object3D;
-    const rig = this.el.object3D;
+  tick(t, dt) {
+    if (!this.moving || !this.rig || !this.cam) return;
+    // Dirección hacia donde mira la cámara (plana en XZ)
+    this.cam.object3D.getWorldDirection(this.dir);
+    this.dir.y = 0; this.dir.normalize();
 
-    cam.getWorldDirection(this._dir);
-    this._dir.y = 0;            // stay on the ground plane
-    this._dir.normalize();
-
-    const step = (this.data.speed) * (deltaMs / 1000);
-    rig.position.addScaledVector(this._dir, step);
+    const step = (this.data.speed) * (dt / 1000);
+    this.rig.object3D.position.addScaledVector(this.dir, step);
   },
-  remove() {
-    const canvas = this.el.sceneEl && this.el.sceneEl.canvas;
-    if (!canvas) return;
-    canvas.removeEventListener('touchstart', this._onDown);
-    canvas.removeEventListener('touchend',   this._onUp);
-    canvas.removeEventListener('touchcancel',this._onUp);
-    canvas.removeEventListener('mousedown',  this._onDown);
-    canvas.removeEventListener('mouseup',    this._onUp);
-  }
+  remove() { if (this._detach) this._detach(); }
 });
   AFRAME.registerComponent('show-on-near', {
     schema: {
@@ -665,11 +664,8 @@ AFRAME.registerComponent('touch-walk-forward', {
                material="color: #ffffff; transparent: true; opacity: 0.06"></a-plane>
     </a-entity>
 
-<!-- Player rig -->
-<a-entity id="rig"
-          position="7.5 2 -2"
-          rotation="0 -90 0"
-          touch-walk-forward="camera: #camera; speed: 1.6">
+<!-- Player rig (necesario para mover en móvil) -->
+<a-entity id="rig" position="7.5 1.6 -2" rotation="0 -90 0">
   <a-entity id="camera"
             camera
             look-controls
@@ -782,6 +778,7 @@ The palette is broad and varies by species and growth stage: pale pink, rose, ma
   </script>
 </body>
 </html>
+
 
 
 
