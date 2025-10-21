@@ -336,9 +336,7 @@
      NEW: Mobile-friendly rig
   ==========================*/
   AFRAME.registerComponent('rig-touch-move', {
-    schema: {
-      speed: { default: 2.2 }   // meters per second
-    },
+    schema: { speed: { default: 2.6 } }, // meters per second
     init() {
       this._forward = false;
       this._backward = false;
@@ -362,7 +360,7 @@
       const dt = Math.min(deltaMs || 0, 50) / 1000; // clamp to avoid spikes
       if (!this._forward && !this._backward) return;
 
-      // Get camera forward in world space (y=0 to stay level)
+      // Move along the camera's facing direction (level on Y)
       cam.object3D.getWorldDirection(this._dir);
       this._dir.y = 0;
       this._dir.normalize();
@@ -370,8 +368,7 @@
       const dir = (this._forward ? 1 : 0) + (this._backward ? -1 : 0);
       this._v.copy(this._dir).multiplyScalar(dir * this.data.speed * dt);
 
-      const p = rig.object3D.position;
-      p.add(this._v);
+      rig.object3D.position.add(this._v);
     }
   });
   </script>
@@ -380,7 +377,7 @@
 <body>
   <!-- ===== Mobile overlay controls (outside canvas, won't block look/move) ===== -->
   <div class="mobile-controls" id="mobileControls" aria-hidden="true">
-    <!-- Labels swapped per your request -->
+    <!-- Labels as you wanted -->
     <button id="btnForward" type="button">Back</button>
     <button id="btnBack" type="button">Forward</button>
   </div>
@@ -666,15 +663,18 @@
     </a-entity>
 
     <!-- ============== CAMERA RIG ============== -->
+    <!-- Important: rig rotation is 0; camera handles look AND WASD. -->
     <a-entity id="rig"
               position="7.5 2 -2"
-              rotation="0 -90 0"
+              rotation="0 0 0"
               rig-touch-move="speed: 2.6">
       <a-entity id="camera"
                 camera
                 look-controls="touchEnabled: true"
+                wasd-controls="acceleration: 60; fly: false"
                 cursor="rayOrigin: mouse"
-                raycaster="objects: .clickable; far: 20">
+                raycaster="objects: .clickable; far: 20"
+                rotation="0 -90 0">
       </a-entity>
     </a-entity>
   </a-scene>
